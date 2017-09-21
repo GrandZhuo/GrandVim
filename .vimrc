@@ -338,7 +338,7 @@ let g:UltiSnipsJumpBackwardTrigger="<leader><s-tab>"
 "**********************************************************************
 "                              Signature                              *
 "**********************************************************************
-let g:SignatureMap = {
+"let g:SignatureMap = {
         \ 'Leader'             :  "m",
         \ 'PlaceNextMark'      :  "m,",
         \ 'ToggleMarkAtLine'   :  "m.",
@@ -361,7 +361,24 @@ let g:SignatureMap = {
         \ 'ListLocalMarks'     :  "ms",
         \ 'ListLocalMarkers'   :  "m?"
         \ }
-
+"let g:SignatureMap = {
+      \ 'Leader'             :  "m",
+      \ 'PlaceNextMark'      :  ",",
+      \ 'PurgeMarks'         :  "<Space>",
+      \ 'PurgeMarkers'       :  "<BS>",
+      \ 'GotoNextLineAlpha'  :  "']",
+      \ 'GotoPrevLineAlpha'  :  "'[",
+      \ 'GotoNextSpotAlpha'  :  "`]",
+      \ 'GotoPrevSpotAlpha'  :  "`[",
+      \ 'GotoNextLineByPos'  :  "]'",
+      \ 'GotoPrevLineByPos'  :  "['",
+      \ 'GotoNextSpotByPos'  :  "]`",
+      \ 'GotoPrevSpotByPos'  :  "[`",
+      \ 'GotoNextMarker'     :  "]-",
+      \ 'GotoPrevMarker'     :  "[-",
+      \ 'GotoNextMarkerAny'  :  "]=",
+      \ 'GotoPrevMarkerAny'  :  "[=",
+      \ }
 
 "**********************************************************************
 "                               SrcExpl                               *
