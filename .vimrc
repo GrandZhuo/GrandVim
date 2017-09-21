@@ -283,6 +283,8 @@ nnoremap <leader>tp :tprevious<CR>
 " 默认 --c++-kinds=+p+l，重新设置为 --c++-kinds=+p+l+x+c+d+e+f+g+m+n+s+t+u+v
 " 默认 --fields=+iaS 不满足 YCM 要求，需改为 --fields=+iaSl
 let g:indexer_ctagsCommandLineOptions="--c++-kinds=+p+l+x+c+d+e+f+g+m+n+s+t+u+v --fields=+iaSl --extra=+q"
+" 打开工程文件时不更新tags
+let g:indexer_dontUpdateTagsIfFileExists=1
 
 
 "**********************************************************************
