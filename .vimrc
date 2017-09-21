@@ -442,10 +442,10 @@ set undodir=~/.undo_history/
 set undofile
 
 " 保存快捷键
-nnoremap <leader>ss :mksession! my.vim<CR> :wviminfo! my.viminfo<CR>
+nnoremap <leader>ss :mksession! .my.vim<CR> :wviminfo! .my.viminfo<CR>
 
 " 恢复快捷键
-nnoremap <leader>rs :source my.vim<CR> :rviminfo my.viminfo<CR>
+nnoremap <leader>rs :source .my.vim<CR> :rviminfo .my.viminfo<CR>
 
 
 "**********************************************************************
