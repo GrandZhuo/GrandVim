@@ -624,7 +624,7 @@ nnoremap <leader>co :copen<CR>
 nnoremap <leader>ccl :cclose<CR>
 
 " 关闭窗口
-nnoremap <leader>cl :close<CR>
+"nnoremap <leader>cl :close<CR> " 被NERDcomment占用，使用<leader>q即可
 
 "**********************************************************************
 "                               文件命令                              *
