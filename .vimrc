@@ -220,7 +220,10 @@ let g:disable_protodef_sorting=1
 let tagbar_left=1 
 
 " 设置显示／隐藏标签列表子窗口的快捷键。
-nnoremap <leader>tb :TagbarToggle<CR> 
+nnoremap <leader>tb :TagbarToggle<CR>
+
+" 打开tagbar和nerdtree
+nnoremap wm :NERDTreeToggle<CR>:TagbarToggle<CR>:wincmd h<CR>
 
 " 设置标签子窗口的宽度 
 let tagbar_width=32 
