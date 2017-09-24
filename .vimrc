@@ -38,6 +38,7 @@ Plugin 'scrooloose/nerdtree' " 工程文件管理
 Plugin 'fholgado/minibufexpl.vim' " 显示buffer
 Plugin 'gcmt/wildfire.vim' " 选中结对符中的内容
 Plugin 'Lokaltog/vim-easymotion' " 快速移动
+Plugin 'jiangmiao/auto-pairs' " 括号补全
 " plugin from http://vim-scripts.org/vim/scripts.html
 " Plugin 'L9'
 " Git plugin not hosted on GitHub
