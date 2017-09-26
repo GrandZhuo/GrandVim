@@ -81,7 +81,7 @@ colorscheme solarized
 " set background=dark
 
 " 禁止代码折行
-set nowrap
+"set nowrap
 
 " 设置leader键
 let mapleader=","
