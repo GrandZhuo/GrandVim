@@ -138,42 +138,53 @@ class YouCompleteMe( object ):
     self._filetypes_with_keywords_loaded = set()
     self._server_is_ready_with_cache = False
 
-    server_port = utils.GetUnusedLocalhostPort()
-    # The temp options file is deleted by ycmd during startup
+    hmac_secret = os.urandom( HMAC_SECRET_LENGTH )
+    options_dict = dict( self._user_options )
+    options_dict[ 'hmac_secret' ] = utils.ToUnicode(
+      base64.b64encode( hmac_secret ) )
+    options_dict[ 'server_keep_logfiles' ] = self._user_options[
+      'keep_logfiles' ]
+
+    # The temp options file is deleted by ycmd during startup.
     with NamedTemporaryFile( delete = False, mode = 'w+' ) as options_file:
-      hmac_secret = os.urandom( HMAC_SECRET_LENGTH )
-      options_dict = dict( self._user_options )
-      options_dict[ 'hmac_secret' ] = utils.ToUnicode(
-        base64.b64encode( hmac_secret ) )
-      options_dict[ 'server_keep_logfiles' ] = self._user_options[
-        'keep_logfiles' ]
       json.dump( options_dict, options_file )
-      options_file.flush()
 
-      args = [ paths.PathToPythonInterpreter(),
-               paths.PathToServerScript(),
-               '--port={0}'.format( server_port ),
-               '--options_file={0}'.format( options_file.name ),
-               '--log={0}'.format( self._user_options[ 'log_level' ] ),
-               '--idle_suicide_seconds={0}'.format(
-                  SERVER_IDLE_SUICIDE_SECONDS ) ]
+    server_port = utils.GetUnusedLocalhostPort()
 
-      self._server_stdout = utils.CreateLogfile(
-          SERVER_LOGFILE_FORMAT.format( port = server_port, std = 'stdout' ) )
-      self._server_stderr = utils.CreateLogfile(
-          SERVER_LOGFILE_FORMAT.format( port = server_port, std = 'stderr' ) )
-      args.append( '--stdout={0}'.format( self._server_stdout ) )
-      args.append( '--stderr={0}'.format( self._server_stderr ) )
+    BaseRequest.server_location = 'http://127.0.0.1:' + str( server_port )
+    BaseRequest.hmac_secret = hmac_secret
 
-      if self._user_options[ 'keep_logfiles' ]:
-        args.append( '--keep_logfiles' )
+    try:
+      python_interpreter = paths.PathToPythonInterpreter()
+    except RuntimeError as error:
+      error_message = (
+        "Unable to start the ycmd server. {0}. "
+        "Correct the error then restart the server "
+        "with ':YcmRestartServer'.".format( str( error ).rstrip( '.' ) ) )
+      self._logger.exception( error_message )
+      vimsupport.PostVimMessage( error_message )
+      return
 
-      self._server_popen = utils.SafePopen( args, stdin_windows = PIPE,
-                                            stdout = PIPE, stderr = PIPE )
-      BaseRequest.server_location = 'http://127.0.0.1:' + str( server_port )
-      BaseRequest.hmac_secret = hmac_secret
+    args = [ python_interpreter,
+             paths.PathToServerScript(),
+             '--port={0}'.format( server_port ),
+             '--options_file={0}'.format( options_file.name ),
+             '--log={0}'.format( self._user_options[ 'log_level' ] ),
+             '--idle_suicide_seconds={0}'.format(
+                SERVER_IDLE_SUICIDE_SECONDS ) ]
 
-    self._NotifyUserIfServerCrashed()
+    self._server_stdout = utils.CreateLogfile(
+        SERVER_LOGFILE_FORMAT.format( port = server_port, std = 'stdout' ) )
+    self._server_stderr = utils.CreateLogfile(
+        SERVER_LOGFILE_FORMAT.format( port = server_port, std = 'stderr' ) )
+    args.append( '--stdout={0}'.format( self._server_stdout ) )
+    args.append( '--stderr={0}'.format( self._server_stderr ) )
+
+    if self._user_options[ 'keep_logfiles' ]:
+      args.append( '--keep_logfiles' )
+
+    self._server_popen = utils.SafePopen( args, stdin_windows = PIPE,
+                                          stdout = PIPE, stderr = PIPE )
 
 
   def _SetupLogging( self ):
@@ -215,9 +226,8 @@ class YouCompleteMe( object ):
 
 
   def IsServerAlive( self ):
-    return_code = self._server_popen.poll()
     # When the process hasn't finished yet, poll() returns None.
-    return return_code is None
+    return bool( self._server_popen ) and self._server_popen.poll() is None
 
 
   def CheckIfServerIsReady( self ):
@@ -232,8 +242,9 @@ class YouCompleteMe( object ):
     return self._server_is_ready_with_cache
 
 
-  def _NotifyUserIfServerCrashed( self ):
-    if self._user_notified_about_crash or self.IsServerAlive():
+  def NotifyUserIfServerCrashed( self ):
+    if ( not self._server_popen or self._user_notified_about_crash or
+         self.IsServerAlive() ):
       return
     self._user_notified_about_crash = True
 
@@ -358,7 +369,7 @@ class YouCompleteMe( object ):
 
   def OnFileReadyToParse( self ):
     if not self.IsServerAlive():
-      self._NotifyUserIfServerCrashed()
+      self.NotifyUserIfServerCrashed()
       return
 
     if not self.IsServerReady():
@@ -589,10 +600,10 @@ class YouCompleteMe( object ):
     extra_data = {}
     self._AddExtraConfDataIfNeeded( extra_data )
     debug_info += FormatDebugInfoResponse( SendDebugInfoRequest( extra_data ) )
-    debug_info += (
-      'Server running at: {0}\n'
-      'Server process ID: {1}\n'.format( BaseRequest.server_location,
-                                         self._server_popen.pid ) )
+    debug_info += 'Server running at: {0}\n'.format(
+      BaseRequest.server_location )
+    if self._server_popen:
+      debug_info += 'Server process ID: {0}\n'.format( self._server_popen.pid )
     if self._server_stdout and self._server_stderr:
       debug_info += ( 'Server logfiles:\n'
                       '  {0}\n'
