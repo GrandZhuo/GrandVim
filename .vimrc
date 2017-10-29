@@ -77,7 +77,7 @@ filetype plugin indent on    " required
 
 " 主题
 colorscheme solarized
-"kcolorscheme molokai
+"colorscheme molokai
 " set background=dark
 
 " 禁止代码折行
@@ -469,6 +469,7 @@ let g:wildfire_objects = ["i'", 'i"', "i)", "i]", "i}", "i>", "ip"]
 "**********************************************************************
 " 配置默认的ycm_extra_conf.py
 let g:ycm_global_ycm_extra_conf = '~/.ycm_extra_conf.py' 
+"let g:ycm_global_ycm_extra_conf = '~/.vim/bundle/YouCompleteMe/third_party/ycmd/cpp/ycm/.ycm_extra_conf.py' 
 
 "关闭加载.ycm_extra_conf.py提示
 let g:ycm_confirm_extra_conf=0
@@ -661,8 +662,9 @@ func SetTitle()
     endif
     if expand("%:e") == 'cpp'
         call append(line(".")+6, "#include <iostream>")
-        call append(line(".")+7, "using namespace std;")
-        call append(line(".")+8, "")
+        call append(line(".")+7, "")
+        call append(line(".")+8, "using namespace std;")
+        call append(line(".")+9, "")
     endif
     if &filetype == 'c'
         call append(line(".")+6, "#include<stdio.h>")

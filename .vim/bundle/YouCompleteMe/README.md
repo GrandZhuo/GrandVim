@@ -181,16 +181,16 @@ Compiling YCM **without** semantic support for C-family languages:
 The following additional language support options are available:
 
 - C# support: install Mono with [Homebrew][brew] or by downloading the [Mono Mac
-  package][mono-install-osx] and add `--omnisharp-completer` when calling
+  package][mono-install-osx] and add `--cs-completer` when calling
   `./install.py`.
-- Go support: install [Go][go-install] and add `--gocode-completer` when calling
+- Go support: install [Go][go-install] and add `--go-completer` when calling
   `./install.py`.
 - TypeScript support: install [Node.js and npm][npm-install] then install the
   TypeScript SDK with `npm install -g typescript`.
 - JavaScript support: install [Node.js and npm][npm-install] and add
-  `--tern-completer` when calling `./install.py`.
+  `--js-completer` when calling `./install.py`.
 - Rust support: install [Rust][rust-install] and add
-  `--racer-completer` when calling `./install.py`.
+  `--rust-completer` when calling `./install.py`.
 
 To simply compile with everything enabled, there's a `--all` flag.  So, to
 install with all language features, ensure `xbuild`, `go`, `tsserver`, `node`,
@@ -253,15 +253,15 @@ Compiling YCM **without** semantic support for C-family languages:
 
 The following additional language support options are available:
 
-- C# support: install [Mono][mono-install-ubuntu] and add `--omnisharp-completer`
+- C# support: install [Mono][mono-install-ubuntu] and add `--cs-completer`
   when calling `./install.py`.
-- Go support: install [Go][go-install] and add `--gocode-completer` when calling
+- Go support: install [Go][go-install] and add `--go-completer` when calling
   `./install.py`.
 - TypeScript support: install [Node.js and npm][npm-install] then install the
   TypeScript SDK with `npm install -g typescript`.
 - JavaScript support: install [Node.js and npm][npm-install] and add
-  `--tern-completer` when calling `./install.py`.
-- Rust support: install [Rust][rust-install] and add `--racer-completer` when
+  `--js-completer` when calling `./install.py`.
+- Rust support: install [Rust][rust-install] and add `--rust-completer` when
   calling `./install.py`.
 
 To simply compile with everything enabled, there's a `--all` flag.  So, to
@@ -320,15 +320,15 @@ Compiling YCM **without** semantic support for C-family languages:
 
 The following additional language support options are available:
 
-- C# support: install [Mono][mono-install-fedora] and add `--omnisharp-completer`
+- C# support: install [Mono][mono-install-fedora] and add `--cs-completer`
   when calling `./install.py`.
-- Go support: install [Go][go-install] and add `--gocode-completer` when calling
+- Go support: install [Go][go-install] and add `--go-completer` when calling
   `./install.py`.
 - TypeScript support: install [Node.js and npm][npm-install] then install the
   TypeScript SDK with `npm install -g typescript`.
 - JavaScript support: install [Node.js and npm][npm-install] and add
-  `--tern-completer` when calling `./install.py`.
-- Rust support: install [Rust][rust-install] and add `--racer-completer` when
+  `--js-completer` when calling `./install.py`.
+- Rust support: install [Rust][rust-install] and add `--rust-completer` when
   calling `./install.py`.
 
 To simply compile with everything enabled, there's a `--all` flag.  So, to
@@ -390,8 +390,8 @@ _Windows x86-64_ for a 64-bit Vim. We recommend installing Python 3.
 variable.
 - [Visual Studio][visual-studio-download]. Download the community edition.
 During setup, select _Desktop development with C++_ in _Workloads_.
-- [7-zip][7z-download]. Required to build YCM with semantic support for
-C-family languages.
+- [7-zip 16.04 or later][7z-download]. Required to build YCM with semantic
+support for C-family languages.
 
 Compiling YCM **with** semantic support for C-family languages:
 
@@ -405,15 +405,15 @@ Compiling YCM **without** semantic support for C-family languages:
 
 The following additional language support options are available:
 
-- C# support: add `--omnisharp-completer` when calling `install.py`.
+- C# support: add `--cs-completer` when calling `install.py`.
   Be sure that [the build utility `msbuild` is in your PATH][add-msbuild-to-path].
-- Go support: install [Go][go-install] and add `--gocode-completer` when calling
+- Go support: install [Go][go-install] and add `--go-completer` when calling
   `install.py`.
 - TypeScript support: install [Node.js and npm][npm-install] then install the
   TypeScript SDK with `npm install -g typescript`.
 - JavaScript support: install [Node.js and npm][npm-install] and add
-  `--tern-completer` when calling `install.py`.
-- Rust support: install [Rust][rust-install] and add `--racer-completer` when
+  `--js-completer` when calling `install.py`.
+- Rust support: install [Rust][rust-install] and add `--rust-completer` when
   calling `install.py`.
 
 To simply compile with everything enabled, there's a `--all` flag.  So, to
@@ -476,15 +476,15 @@ Compiling YCM **without** semantic support for C-family languages:
 
 The following additional language support options are available:
 
-- C# support: install Mono and add `--omnisharp-completer` when calling
+- C# support: install Mono and add `--cs-completer` when calling
   `./install.py`.
-- Go support: install [Go][go-install] and add `--gocode-completer` when calling
+- Go support: install [Go][go-install] and add `--go-completer` when calling
   `./install.py`.
 - TypeScript support: install [Node.js and npm][npm-install] then install the
   TypeScript SDK with `npm install -g typescript`.
 - JavaScript support: install [Node.js and npm][npm-install] and add
-  `--tern-completer` when calling `./install.py`.
-- Rust support: install [Rust][rust-install] and add `--racer-completer` when
+  `--js-completer` when calling `./install.py`.
+- Rust support: install [Rust][rust-install] and add `--rust-completer` when
   calling `./install.py`.
 
 To simply compile with everything enabled, there's a `--all` flag.  So, to
@@ -1057,16 +1057,20 @@ define( [ 'mylib/file1', 'anotherlib/anotherfile' ], function( f1, f2 ) {
 
 Completions and GoTo commands within the current crate and its dependencies
 should work out of the box with no additional configuration (provided that you
-built YCM with the `--racer-completer` flag; see the [*Installation*
-section](#installation) for details).  For semantic analysis inclusive of the
-standard library, you must have a local copy of [the rust source
-code][rust-src]. You also need to set the following option so YouCompleteMe can
-locate it.
-
+built YCM with the `--rust-completer` flag; see the [*Installation*
+section](#installation) for details). For semantic analysis inclusive of the
+standard library, you must have a local copy of [the Rust source
+code][rust-src]. If using [rustup][], run the following command to download the
+code:
+```
+rustup component add rust-src
+```
+YCM will find its location automatically. Otherwise, download the archive,
+extract it somewhere, and set the following option so YCM can locate it:
 ```viml
-" In this example, the rust source code zip has been extracted to
-" /usr/local/rust/rustc-1.5.0
-let g:ycm_rust_src_path = '/usr/local/rust/rustc-1.5.0/src'
+" In this example, the Rust source code archive has been extracted to
+" /usr/local/rust/rustc-1.20.0
+let g:ycm_rust_src_path = '/usr/local/rust/rustc-1.20.0/src'
 ```
 
 ### Python Semantic Completion
@@ -1314,7 +1318,7 @@ maps the `<leader>jd` sequence to the longer subcommand invocation.
 
 These commands are useful for jumping around and exploring code. When moving
 the cursor, the subcommands add entries to Vim's `jumplist` so you can use
-`CTRL-O` to jump back to where you where before invoking the command (and
+`CTRL-O` to jump back to where you were before invoking the command (and
 `CTRL-I` to jump forward; see `:h jumplist` for details). If there is more
 than one destination, the quickfix list (see `:h quickfix`) is populated with
 the available locations and opened to full width at the bottom of the screen.
@@ -2663,9 +2667,12 @@ cache.
 
 ### YCM auto-inserts completion strings I don't want!
 
-This means you probably have some mappings that interfere with YCM's internal
-ones. Make sure you don't have something mapped to `<C-p>`, `<C-x>` or `<C-u>`
-(in insert mode).
+If this happens when Vim automatically wraps text then it's a Vim bug that has
+been fixed in version 8.0.0127. Update your Vim to this version or later.
+
+This could also be some mappings that interfere with YCM's internal ones. Make
+sure you don't have something mapped to `<C-p>`, `<C-x>` or `<C-u>` (in insert
+mode).
 
 YCM _never_ selects something for you; it just shows you a menu and the user has
 to explicitly select something. If something is being selected automatically,
@@ -3137,3 +3144,4 @@ This software is licensed under the [GPL v3 license][gpl].
 [ninja-compdb]: https://ninja-build.org/manual.html
 [vim-nerdtree-tabs]: https://github.com/jistr/vim-nerdtree-tabs
 [++enc]: http://vimdoc.sourceforge.net/htmldoc/editing.html#++enc
+[rustup]: https://www.rustup.rs/
