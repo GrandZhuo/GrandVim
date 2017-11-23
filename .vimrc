@@ -192,7 +192,7 @@ nnoremap <F3> :wa<CR>:make clean;make<CR>
 set mouse=n
 
 " 设置path
-set path+=../**
+"set path+=../**
 
 " vim自身命令行模式智能补全
 set wildmenu
@@ -296,6 +296,18 @@ let g:indexer_dontUpdateTagsIfFileExists=1
 "**********************************************************************
 map <leader>mm <plug>NERDCommenterToggle
 
+"[count]|<Leader>|cm |NERDComMinimalComment|
+"Comments the given lines using only one set of multipart delimiters.
+
+"[count]|<Leader>|cs |NERDComSexyComment|
+"Comments out the selected lines ``sexily''
+
+"|<Leader>|cA |NERDComAppendComment|
+"Adds comment delimiters to the end of line and goes into insert mode between
+"them.
+
+"|<Leader>|ca |NERDComAltDelim|
+"Switches to the alternative set of delimiters.
 
 "**********************************************************************
 "                               NERDtree                              *
@@ -565,6 +577,11 @@ let g:ycm_warning_symbol = '⚠'
 "set tags+=/data/misc/software/misc./vim/stdcpp.tags
 
 "**********************************************************************
+"                               ici词典                               *
+"**********************************************************************
+nmap <Leader>y :!echo "                  --==  <C-R><C-w>  ==-- ";ici <C-R><C-W><CR>
+
+"**********************************************************************
 "                     C，C++, Java F10编译运行                        *
 "**********************************************************************
 map <F10> :call CompileRunGcc()<CR>
@@ -667,7 +684,7 @@ func SetTitle()
         call append(line(".")+9, "")
     endif
     if &filetype == 'c'
-        call append(line(".")+6, "#include<stdio.h>")
+        call append(line(".")+6, "#include <stdio.h>")
         call append(line(".")+7, "")
     endif
     if expand("%:e") == 'h'
