@@ -182,12 +182,6 @@ set tags=tags;/
 " <F12>切换paste模式
 set pastetoggle=<F12>
 
-" <F2>保存文件并make
-nnoremap <F2> :wa<CR>:make<CR>
-
-" <F3>保存文件并make clean;make
-nnoremap <F3> :wa<CR>:make clean;make<CR>
-
 " 设置normal模式开启鼠标支持
 set mouse=n
 
@@ -583,11 +577,22 @@ let g:ycm_warning_symbol = '⚠'
 "**********************************************************************
 nmap <Leader>y :!echo "                  --==  <C-R><C-w>  ==-- ";ici <C-R><C-W><CR>
 
+
 "**********************************************************************
-"                     C，C++, Java F10编译运行                        *
+"                        Makefile F2 F3                               *
 "**********************************************************************
-map <F10> :call CompileRunGcc()<CR>
-func! CompileRunGcc()
+" <F2>保存文件并make
+nnoremap <F2> :wa<CR>:make<CR>
+
+" <F3>保存文件并make clean;make
+nnoremap <F3> :wa<CR>:make clean;make<CR>
+
+
+"**********************************************************************
+"               C，C++, Java, shell, Python F10编译运行                        *
+"**********************************************************************
+map <F10> :call CompileRun()<CR>
+func! CompileRun()
     exec "w"
     if &filetype == 'c'
         exec "!gcc % -o %<"
@@ -599,7 +604,9 @@ func! CompileRunGcc()
         exec "!javac %" 
         exec "!java %<"
     elseif &filetype == 'sh'
-        :!./%
+        exec "!sh ./%"
+    elseif &filetype == 'python'
+        exec "!python3 %"
     endif
 endfunc
 
