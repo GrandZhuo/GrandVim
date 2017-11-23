@@ -483,6 +483,8 @@ let g:wildfire_objects = ["i'", 'i"', "i)", "i]", "i}", "i>", "ip"]
 let g:ycm_global_ycm_extra_conf = '~/.ycm_extra_conf.py' 
 "let g:ycm_global_ycm_extra_conf = '~/.vim/bundle/YouCompleteMe/third_party/ycmd/cpp/ycm/.ycm_extra_conf.py' 
 
+" 配置python版本
+let g:ycm_python_binary_path = '/usr/local/bin/python3'
 "关闭加载.ycm_extra_conf.py提示
 let g:ycm_confirm_extra_conf=0
 
