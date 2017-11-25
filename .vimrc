@@ -621,17 +621,17 @@ func! CompileRun()
     exec "w"
     if &filetype == 'c'
         exec "!gcc % -o %<"
-        exec "! ./%<"
+        exec "!time ./%<"
     elseif &filetype == 'cpp'
         exec "!g++ % -o %<"
-        exec "! ./%<"
+        exec "!time  ./%<"
     elseif &filetype == 'java' 
         exec "!javac %" 
-        exec "!java %<"
+        exec "!time java %<"
     elseif &filetype == 'sh'
-        exec "!sh ./%"
+        exec "!time sh ./%"
     elseif &filetype == 'python'
-        exec "!python3 %"
+        exec "!time python3 %"
     endif
 endfunc
 
