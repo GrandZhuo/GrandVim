@@ -20,6 +20,7 @@ Plugin 'VundleVim/Vundle.vim'
 " plugin on GitHub repo
 Plugin 'tpope/vim-fugitive'
 Plugin 'Valloric/YouCompleteMe'
+Plugin 'rdnetto/YCM-Generator' " 生成.ycm_extra_conf.py
 Plugin 'wesleyche/SrcExpl'
 Plugin 'altercation/vim-colors-solarized'
 Plugin 'tomasr/molokai'
@@ -39,6 +40,8 @@ Plugin 'fholgado/minibufexpl.vim' " 显示buffer
 Plugin 'gcmt/wildfire.vim' " 选中结对符中的内容
 Plugin 'Lokaltog/vim-easymotion' " 快速移动
 Plugin 'jiangmiao/auto-pairs' " 括号补全
+Plugin 'davidhalter/jedi-vim' " Pythony语法提示
+Plugin 'vim-syntastic/syntastic' " 语法检
 " plugin from http://vim-scripts.org/vim/scripts.html
 " Plugin 'L9'
 " Git plugin not hosted on GitHub
@@ -183,7 +186,7 @@ set tags=tags;/
 set pastetoggle=<F12>
 
 " 设置normal模式开启鼠标支持
-set mouse=n
+"set mouse=n
 
 " 设置path
 "set path+=../**
@@ -471,6 +474,22 @@ let g:wildfire_objects = ["i'", 'i"', "i)", "i]", "i}", "i>", "ip"]
 
 
 "**********************************************************************
+"                           syntasticM配置                            *
+"**********************************************************************
+set statusline+=%#warningmsg#
+set statusline+=%{SyntasticStatuslineFlag()}
+set statusline+=%*
+
+let g:syntastic_always_populate_loc_list = 1
+let g:syntastic_auto_loc_list = 1
+let g:syntastic_check_on_open = 1
+let g:syntastic_check_on_wq = 0
+
+" 错误警告标记
+let g:syntastic_error_symbol = "✗"
+let g:syntastic_warning_symbol = "⚠"
+
+"**********************************************************************
 "                               YCM配置                               *
 "**********************************************************************
 " 配置默认的ycm_extra_conf.py
@@ -543,7 +562,7 @@ nnoremap <leader>f5 :YcmForceCompileAndDiagnostics<CR>	"force recomile with synt
 "
 "nnoremap <leader>lo :lopen<CR>	"open locationlist
 "nnoremap <leader>lc :lclose<CR>	"close locationlist
-inoremap <leader><leader> <C-x><C-o>
+
 "在注释输入中也能补全
 let g:ycm_complete_in_comments = 1
 "在字符串输入中也能补全
@@ -571,6 +590,12 @@ let g:ycm_warning_symbol = '⚠'
 
 " 引入 C++ 标准库tags
 "set tags+=/data/misc/software/misc./vim/stdcpp.tags
+
+
+"**********************************************************************
+"                           jedi-vim 配置                             *
+"**********************************************************************
+let g:jedi#completions_command = "<C-K>"
 
 "**********************************************************************
 "                               ici词典                               *
