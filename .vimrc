@@ -637,13 +637,20 @@ endfunc
 
 
 "**********************************************************************
-"                        C,C++ gdb调试 F11                            *
+"                 C,C++ gdb调试 Python pdb F11                        *
 "**********************************************************************
 map <F11> :call Rungdb()<CR>
 func! Rungdb()
-    exec "w"
-    exec "!g++ % -g -o %<"
-    exec "!gdb ./%<"
+	exec "w"
+	if &filetype == 'c'
+		exec "!gcc % -g -o %<"
+		exec "!gdb ./%<"
+	elseif &filetype == 'cpp'
+		exec "!g++ % -g -o %<"
+		exec "!gdb ./%<"
+	elseif &filetype == 'python'
+		exec '!python3 -m pdb %'
+	endif
 endfunc
 
 
