@@ -666,6 +666,10 @@ noremap <C-K>     <C-W>k
 noremap <C-H>     <C-W>h
 noremap <C-L>     <C-W>l
 
+" 切换缓冲区
+nnoremap <leader>bn :bNext<CR>
+nnoremap <leader>bp :bprevious<CR>
+
 " 映射全选+复制 ctrl+a
 "map <C-A> ggVGY
 "map! <C-A> <Esc>ggVGY
