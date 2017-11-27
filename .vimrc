@@ -534,6 +534,9 @@ let g:ycm_min_num_of_chars_for_completion=2
 " 禁止缓存匹配项,每次都重新生成匹配项
 let g:ycm_cache_omnifunc=0
 
+" 调用语义补全
+let g:ycm_key_invoke_completion = '<C-J>'
+
 " 语法关键字补全
 let g:ycm_seed_identifiers_with_syntax=1
 
