@@ -353,6 +353,8 @@ let g:UltiSnipsJumpBackwardTrigger="<leader><s-tab>"
 "**********************************************************************
 "                              Signature                              *
 "**********************************************************************
+nnoremap <S-M> `
+
 "let g:SignatureMap = {
         \ 'Leader'             :  "m",
         \ 'PlaceNextMark'      :  "m,",
