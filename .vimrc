@@ -170,7 +170,7 @@ runtime macros/matchit.vim
 
 " 创建快捷键关闭高亮功能"
 "nnoremap <silent> <C-l>	:<C-u>nohlsearch<CR><C-l>
-nnoremap <leader>/ :nohlsearch<CR>
+nnoremap <leader>f :nohlsearch<CR>
 
 " 每次保存文件时调用ctags
 "autocmd BufWritePost * call system("ctags -R")
