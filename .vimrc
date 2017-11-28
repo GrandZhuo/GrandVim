@@ -221,7 +221,7 @@ let tagbar_left=1
 nnoremap <leader>tb :TagbarToggle<CR>
 
 " 打开tagbar和nerdtree
-nnoremap wm :NERDTreeToggle<CR>:TagbarToggle<CR>:wincmd h<CR>
+nnoremap <leader>wm :NERDTreeToggle<CR>:TagbarToggle<CR>:wincmd h<CR>
 
 " 设置标签子窗口的宽度 
 let tagbar_width=32 
