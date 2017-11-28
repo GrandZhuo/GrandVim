@@ -18,7 +18,7 @@ Plugin 'VundleVim/Vundle.vim'
 " The following are examples of different formats supported.
 " Keep Plugin commands between vundle#begin/end.
 " plugin on GitHub repo
-Plugin 'tpope/vim-fugitive'
+Plugin 'tpope/vim-fugitive' "集成Git
 Plugin 'Valloric/YouCompleteMe'
 Plugin 'rdnetto/YCM-Generator' " 生成.ycm_extra_conf.py
 Plugin 'wesleyche/SrcExpl'
@@ -170,7 +170,7 @@ runtime macros/matchit.vim
 
 " 创建快捷键关闭高亮功能"
 "nnoremap <silent> <C-l>	:<C-u>nohlsearch<CR><C-l>
-nnoremap <leader>f :nohlsearch<CR>
+nnoremap <leader>ff :nohlsearch<CR>
 
 " 每次保存文件时调用ctags
 "autocmd BufWritePost * call system("ctags -R")
@@ -193,6 +193,9 @@ set pastetoggle=<F12>
 
 " vim自身命令行模式智能补全
 set wildmenu
+
+" sudo权限写文件
+cmap w!! w !sudo tee % > /dev/null
 
 
 "**********************************************************************
@@ -449,10 +452,10 @@ let g:SrcExpl_nextDefKey = "<leader>dn"
 
 
 "**********************************************************************
-"                             UltiSnips                               *
+"                           设置保存环境                              *
 "**********************************************************************
 " 设置环境保存项
-set sessionoptions="blank,buffers,globals,localoptions,tabpages,sesdir,folds,help,options,resize,winpos,winsize"
+set sessionoptions="blank,buffers,folds,globals,localoptions,tabpages,sesdir,folds,help,options,resize,winpos,winsize"
 
 " 保存 undo 历史
 set undodir=~/.undo_history/
