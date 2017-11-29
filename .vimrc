@@ -540,7 +540,7 @@ let g:ycm_min_num_of_chars_for_completion=2
 let g:ycm_cache_omnifunc=0
 
 " 调用语义补全
-let g:ycm_key_invoke_completion = '<C-J>'
+let g:ycm_key_invoke_completion = '<C-I>'
 
 " 语法关键字补全
 let g:ycm_seed_identifiers_with_syntax=1
