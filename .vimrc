@@ -190,7 +190,19 @@ nnoremap <leader>ctg :!ctags -R --c++-kinds=+p+l+x+c+d+e+f+g+m+n+s+t+u+v --field
 set tags=tags;/
 
 " <F12>切换paste模式
-set pastetoggle=<F12>
+"set pastetoggle=<F12>
+
+" 自动切换paste模式
+let &t_SI .= "\<Esc>[?2004h"
+let &t_EI .= "\<Esc>[?2004l"
+
+inoremap <special> <expr> <Esc>[200~ XTermPasteBegin()
+
+function! XTermPasteBegin()
+	set pastetoggle=<Esc>[201~
+	set paste
+	return ""
+endfunction
 
 " 设置normal模式开启鼠标支持
 "set mouse=n
@@ -234,7 +246,7 @@ nnoremap <leader>tb :TagbarToggle<CR>
 nnoremap <leader>mw :NERDTreeToggle<CR>:TagbarToggle<CR>:wincmd h<CR>
 
 " 设置标签子窗口的宽度 
-let tagbar_width=32 
+let tagbar_width=20 
 
 " tagbar 子窗口中不显示冗余帮助信息 
 let g:tagbar_compact=1
@@ -323,7 +335,7 @@ map <leader>mm <plug>NERDCommenterToggle
 nmap <leader>fl :NERDTreeToggle<CR>
 
 " 设置NERDTree子窗口宽度
-let NERDTreeWinSize=32
+let NERDTreeWinSize=20
 
 " 设置NERDTree子窗口位置
 let NERDTreeWinPos="right"
