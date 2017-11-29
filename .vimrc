@@ -143,7 +143,14 @@ set ruler
 
 " 设置默认显示行号
 set nu
-" set nonu
+nnoremap <leader>nn :set nonu<CR>
+" 显示相对行号
+set rnu
+nnoremap <leader>nr :set nornu<CR>
+
+"插入模式下用绝对行号, 普通模式下用相对
+autocmd InsertEnter * :set norelativenumber number
+autocmd InsertLeave * :set relativenumber
 
 " 设置历史记录保存数量
 set history=200
@@ -170,7 +177,7 @@ runtime macros/matchit.vim
 
 " 创建快捷键关闭高亮功能"
 "nnoremap <silent> <C-l>	:<C-u>nohlsearch<CR><C-l>
-nnoremap <leader>ff :nohlsearch<CR>
+nnoremap <leader>nf :nohlsearch<CR>
 
 " 每次保存文件时调用ctags
 "autocmd BufWritePost * call system("ctags -R")
@@ -224,7 +231,7 @@ let tagbar_left=1
 nnoremap <leader>tb :TagbarToggle<CR>
 
 " 打开tagbar和nerdtree
-nnoremap <leader>wm :NERDTreeToggle<CR>:TagbarToggle<CR>:wincmd h<CR>
+nnoremap <leader>mw :NERDTreeToggle<CR>:TagbarToggle<CR>:wincmd h<CR>
 
 " 设置标签子窗口的宽度 
 let tagbar_width=32 
@@ -540,7 +547,7 @@ let g:ycm_min_num_of_chars_for_completion=2
 let g:ycm_cache_omnifunc=0
 
 " 调用语义补全
-let g:ycm_key_invoke_completion = '<C-I>'
+let g:ycm_key_invoke_completion = '<C-L>'
 
 " 语法关键字补全
 let g:ycm_seed_identifiers_with_syntax=1
