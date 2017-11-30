@@ -375,7 +375,7 @@ let g:UltiSnipsJumpBackwardTrigger="<leader><s-tab>"
 "**********************************************************************
 "                              Signature                              *
 "**********************************************************************
-nnoremap <S-M> `
+nnoremap <S-m> `
 
 "let g:SignatureMap = {
         \ 'Leader'             :  "m",
@@ -622,7 +622,7 @@ let g:ycm_warning_symbol = '⚠'
 "**********************************************************************
 "                           jedi-vim 配置                             *
 "**********************************************************************
-let g:jedi#completions_command = "<C-K>"
+let g:jedi#completions_command = "<C-k>"
 
 "**********************************************************************
 "                               ici词典                               *
@@ -695,10 +695,10 @@ nnoremap <leader>q :q<CR>
 nnoremap <leader>fd :find 
 
 " 切换窗口
-noremap <C-J>     <C-W>j
-noremap <C-K>     <C-W>k
-noremap <C-H>     <C-W>h
-noremap <C-L>     <C-W>l
+noremap <C-j>     <C-w>j
+noremap <C-k>     <C-w>k
+noremap <C-h>     <C-w>h
+noremap <C-l>     <C-w>l
 
 " 切换缓冲区
 nnoremap <leader>bn :bNext<CR>
