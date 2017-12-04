@@ -190,7 +190,7 @@ nnoremap <leader>ctg :!ctags -R --c++-kinds=+p+l+x+c+d+e+f+g+m+n+s+t+u+v --field
 set tags=tags;/
 
 " <F12>切换paste模式
-"set pastetoggle=<F12>
+set pastetoggle=<F12>
 
 " 自动切换paste模式
 let &t_SI .= "\<Esc>[?2004h"
@@ -203,6 +203,31 @@ function! XTermPasteBegin()
 	set paste
 	return ""
 endfunction
+
+
+" tmux粘贴，MacOS测试无效
+"function! WrapForTmux(s)
+	"if !exists('$TMUX')
+		"return a:s
+	"endif
+
+	"let tmux_start = "\<Esc>Ptmux;"
+	"let tmux_end = "\<Esc>\\"
+
+	"return tmux_start . substitute(a:s, "\<Esc>", "\<Esc>\<Esc>", 'g') . tmux_end
+"endfunction
+
+"let &t_SI .= WrapForTmux("\<Esc>[?2004h")
+"let &t_EI .= WrapForTmux("\<Esc>[?2004l")
+
+"function! XTermPasteBegin()
+	"set pastetoggle=<Esc>[201~
+	"set paste
+	"return ""
+"endfunction
+
+"inoremap <special> <expr> <Esc>[200~ XTermPasteBegin()
+
 
 " 设置normal模式开启鼠标支持
 "set mouse=n
@@ -671,10 +696,10 @@ func! Rungdb()
 	exec "w"
 	if &filetype == 'c'
 		exec "!gcc % -g -o %<"
-		exec "!gdb ./%<"
+		exec "!cgdb ./%<"
 	elseif &filetype == 'cpp'
 		exec "!g++ % -g -o %<"
-		exec "!gdb ./%<"
+		exec "!cgdb ./%<"
 	elseif &filetype == 'python'
 		exec '!python3 -m pdb %'
 	endif
@@ -695,14 +720,20 @@ nnoremap <leader>q :q<CR>
 nnoremap <leader>fd :find 
 
 " 切换窗口
-noremap <C-j>     <C-w>j
-noremap <C-k>     <C-w>k
-noremap <C-h>     <C-w>h
-noremap <C-l>     <C-w>l
+nnoremap <C-j> <C-w>j
+nnoremap <C-k> <C-w>k
+nnoremap <C-h> <C-w>h
+nnoremap <C-l> <C-w>l
 
 " 切换缓冲区
 nnoremap <leader>bn :bNext<CR>
 nnoremap <leader>bp :bprevious<CR>
+
+" 打开quickfix列表
+nnoremap <leader>co :copen<CR>
+
+" 关闭quickfix列表
+nnoremap <leader>ccl :cclose<CR>
 
 " 映射全选+复制 ctrl+a
 "map <C-A> ggVGY
@@ -710,12 +741,6 @@ nnoremap <leader>bp :bprevious<CR>
 
 " 选中状态下 Ctrl+c 复制
 "vmap <C-c> "+y
-
-" 打开quickfix列表
-nnoremap <leader>co :copen<CR>
-
-" 关闭quickfix列表
-nnoremap <leader>ccl :cclose<CR>
 
 " 关闭窗口
 "nnoremap <leader>cl :close<CR> " 被NERDcomment占用，使用<leader>q即可
