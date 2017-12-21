@@ -78,6 +78,15 @@ filetype plugin indent on    " required
 " 让配置变更立即生效 " 会导致函数重定义
 " autocmd BufWritePost $MYVIMRC source $MYVIMRC
 
+" 编码
+set fileencodings=ucs-bom,utf-8,utf-16,gbk,big5,gb18030,latin1
+
+" MacVim字体
+set guifont=Menlo:h15
+"set guifont=Monaco:h16
+"set guifont=Courier_New:h16
+"set guifont=Source_Code_Pro_Light:h16
+
 " 主题
 colorscheme solarized
 "colorscheme molokai
@@ -246,7 +255,7 @@ cmap w!! w !sudo tee % > /dev/null
 "                             vim-fswitch                             *
 "**********************************************************************
 " *.cpp 和 *.h 间切换
-nnoremap <silent> <leader>di :FSHere<CR>
+nnoremap <silent> <leader>di :w<CR>:FSHere<CR>
 
 
 "**********************************************************************
@@ -626,6 +635,7 @@ let g:ycm_collect_identifiers_from_comments_and_strings = 1
 let g:ycm_error_symbol = '✗'
 let g:ycm_warning_symbol = '⚠'
 
+let g:ycm_echo_current_diagnostic = 1
 " 设置颜色
 "highlight YcmErrorSign                      error标记颜色
 "highlight YcmWarningSign ctermbg=none       warning标记颜色
@@ -696,10 +706,10 @@ func! Rungdb()
 	exec "w"
 	if &filetype == 'c'
 		exec "!gcc % -g -o %<"
-		exec "!cgdb ./%<"
+		exec "!gdb -tui ./%<"
 	elseif &filetype == 'cpp'
 		exec "!g++ % -g -o %<"
-		exec "!cgdb ./%<"
+		exec "!gdb -tui ./%<"
 	elseif &filetype == 'python'
 		exec '!python3 -m pdb %'
 	endif
