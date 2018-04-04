@@ -42,6 +42,7 @@ Plugin 'Lokaltog/vim-easymotion' " 快速移动
 Plugin 'jiangmiao/auto-pairs' " 括号补全
 Plugin 'davidhalter/jedi-vim' " Pythony语法提示
 Plugin 'vim-syntastic/syntastic' " 语法检
+"Plugin 'ybian/smartim' " 切换输入法
 " plugin from http://vim-scripts.org/vim/scripts.html
 " Plugin 'L9'
 " Git plugin not hosted on GitHub
@@ -80,12 +81,6 @@ filetype plugin indent on    " required
 
 " 编码
 set fileencodings=ucs-bom,utf-8,utf-16,gbk,big5,gb18030,latin1
-
-" MacVim字体
-set guifont=Menlo:h15
-"set guifont=Monaco:h16
-"set guifont=Courier_New:h16
-"set guifont=Source_Code_Pro_Light:h16
 
 " 主题
 colorscheme solarized
@@ -249,6 +244,21 @@ set wildmenu
 
 " sudo权限写文件
 cmap w!! w !sudo tee % > /dev/null
+
+
+"**********************************************************************
+"                             Macvim配置                              *
+"**********************************************************************
+" MacVim字体
+set guifont=Menlo:h15
+"set guifont=Monaco:h16
+"set guifont=Courier_New:h16
+"set guifont=Source_Code_Pro_Light:h16
+
+" 切换输入法
+"set noimd 
+"set imi=2 
+"set ims=2 
 
 
 "**********************************************************************
@@ -529,6 +539,12 @@ map <leader>v <Plug>(wildfire-fuel)
 vmap <leader>V <Plug>(wildfire-water)
 " 适用于哪些结对符
 let g:wildfire_objects = ["i'", 'i"', "i)", "i]", "i}", "i>", "ip"]
+
+
+"**********************************************************************
+"                            smartim配置                              *
+"**********************************************************************
+"let g:smartim_default = 'com.apple.keylayout.ABC'
 
 
 "**********************************************************************
