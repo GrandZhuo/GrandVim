@@ -117,10 +117,11 @@ from ast import literal_eval
 from io import StringIO
 from functools import reduce
 
+import parso
+
 import jedi
 from jedi import debug
 from jedi._compatibility import unicode, is_py3
-from jedi.parser.python import parse
 from jedi.api.classes import Definition
 from jedi.api.completion import get_user_scope
 from jedi import parser_utils
@@ -130,6 +131,9 @@ TEST_COMPLETIONS = 0
 TEST_DEFINITIONS = 1
 TEST_ASSIGNMENTS = 2
 TEST_USAGES = 3
+
+
+grammar36 = parso.load_grammar(version='3.6')
 
 
 class IntegrationTestCase(object):
@@ -154,7 +158,7 @@ class IntegrationTestCase(object):
         return self.line_nr - 1
 
     def __repr__(self):
-        return '<%s: %s:%s:%s>' % (self.__class__.__name__, self.module_name,
+        return '<%s: %s:%s %r>' % (self.__class__.__name__, self.path,
                                    self.line_nr_test, self.line.rstrip())
 
     def script(self):
@@ -188,7 +192,7 @@ class IntegrationTestCase(object):
             should_be = set()
             for match in re.finditer('(?:[^ ]+)', correct):
                 string = match.group(0)
-                parser = parse(string, start_symbol='eval_input', error_recovery=False)
+                parser = grammar36.parse(string, start_symbol='eval_input', error_recovery=False)
                 parser_utils.move(parser.get_root_node(), self.line_nr)
                 element = parser.get_root_node()
                 module_context = script._get_module()

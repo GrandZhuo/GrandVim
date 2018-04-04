@@ -1,23 +1,27 @@
 #!/usr/bin/env python
 
-from __future__ import with_statement
-try:
-    from setuptools import setup
-except ImportError:
-    # Distribute is not actually required to install
-    from distutils.core import setup
+from setuptools import setup, find_packages
+
+import ast
+import sys
 
 __AUTHOR__ = 'David Halter'
 __AUTHOR_EMAIL__ = 'davidhalter88@gmail.com'
 
-readme = open('README.rst').read() + '\n\n' + open('CHANGELOG.rst').read()
-packages = ['jedi', 'jedi.parser', 'jedi.parser.pgen2', 'jedi.parser.python',
-            'jedi.evaluate', 'jedi.evaluate.compiled', 'jedi.api']
+# Get the version from within jedi. It's defined in exactly one place now.
+with open('jedi/__init__.py') as f:
+    tree = ast.parse(f.read())
+if sys.version_info > (3, 7):
+    version = tree.body[0].value.s
+else:
+    version = tree.body[1].value.s
 
-import jedi
+readme = open('README.rst').read() + '\n\n' + open('CHANGELOG.rst').read()
+with open('requirements.txt') as f:
+    install_requires = f.read().splitlines()
 
 setup(name='jedi',
-      version=jedi.__version__,
+      version=version,
       description='An autocompletion tool for Python that can be used for text editors.',
       author=__AUTHOR__,
       author_email=__AUTHOR_EMAIL__,
@@ -28,8 +32,10 @@ setup(name='jedi',
       license='MIT',
       keywords='python completion refactoring vim',
       long_description=readme,
-      packages=packages,
-      package_data={'jedi': ['evaluate/compiled/fake/*.pym', 'parser/grammar*.txt']},
+      packages=find_packages(exclude=['test']),
+      install_requires=install_requires,
+      extras_require={'dev': ['docopt']},
+      package_data={'jedi': ['evaluate/compiled/fake/*.pym']},
       platforms=['any'],
       classifiers=[
           'Development Status :: 4 - Beta',
@@ -44,6 +50,8 @@ setup(name='jedi',
           'Programming Language :: Python :: 3.3',
           'Programming Language :: Python :: 3.4',
           'Programming Language :: Python :: 3.5',
+          'Programming Language :: Python :: 3.6',
+          'Programming Language :: Python :: 3.7',
           'Topic :: Software Development :: Libraries :: Python Modules',
           'Topic :: Text Editors :: Integrated Development Environments (IDE)',
           'Topic :: Utilities',

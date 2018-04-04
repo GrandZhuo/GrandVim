@@ -34,6 +34,10 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 pip install codecov
 if %errorlevel% neq 0 exit /b %errorlevel%
 
+:: Enable coverage for Python subprocesses. See:
+:: http://coverage.readthedocs.io/en/latest/subprocess.html
+python -c "with open('%python_path%\Lib\site-packages\sitecustomize.py', 'w') as f: f.write('import coverage\ncoverage.process_startup()')"
+
 ::
 :: Typescript configuration
 ::
@@ -54,3 +58,15 @@ set PATH=%USERPROFILE%\.cargo\bin;%PATH%
 rustup update
 rustc -Vv
 cargo -V
+
+::
+:: Java Configuration (Java 8 required for jdt.ls)
+::
+if %arch% == 32 (
+  set "JAVA_HOME=C:\Program Files (x86)\Java\jdk1.8.0"
+) else (
+  set "JAVA_HOME=C:\Program Files\Java\jdk1.8.0"
+)
+
+set PATH=%JAVA_HOME%\bin;%PATH%
+java -version

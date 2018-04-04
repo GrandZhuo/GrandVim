@@ -1,4 +1,4 @@
-" Copyright (C) 2011, 2012  Google Inc.
+" Copyright (C) 2011-2018 YouCompleteMe contributors
 "
 " This file is part of YouCompleteMe.
 "
@@ -41,6 +41,10 @@ let s:pollers = {
       \   'server_ready': {
       \     'id': -1,
       \     'wait_milliseconds': 100
+      \   },
+      \   'receive_messages': {
+      \     'id': -1,
+      \     'wait_milliseconds': 100
       \   }
       \ }
 
@@ -68,6 +72,29 @@ function! s:Pyeval( eval_string )
     return py3eval( a:eval_string )
   endif
   return pyeval( a:eval_string )
+endfunction
+
+
+function! s:StartMessagePoll()
+  if s:pollers.receive_messages.id < 0
+    let s:pollers.receive_messages.id = timer_start(
+          \ s:pollers.receive_messages.wait_milliseconds,
+          \ function( 's:ReceiveMessages' ) )
+  endif
+endfunction
+
+
+function! s:ReceiveMessages( timer_id )
+  let poll_again = s:Pyeval( 'ycm_state.OnPeriodicTick()' )
+
+  if poll_again
+    let s:pollers.receive_messages.id = timer_start(
+          \ s:pollers.receive_messages.wait_milliseconds,
+          \ function( 's:ReceiveMessages' ) )
+  else
+    " Don't poll again until we open another buffer
+    let s:pollers.receive_messages.id = -1
+  endif
 endfunction
 
 
@@ -109,6 +136,7 @@ function! youcompleteme#Enable()
     autocmd InsertLeave * call s:OnInsertLeave()
     autocmd VimLeave * call s:OnVimLeave()
     autocmd CompleteDone * call s:OnCompleteDone()
+    autocmd BufEnter,WinEnter * call s:UpdateMatches()
   augroup END
 
   " The FileType event is not triggered for the first loaded file. We wait until
@@ -451,6 +479,7 @@ function! s:OnFileTypeSet()
 
   call s:SetUpCompleteopt()
   call s:SetCompleteFunc()
+  call s:StartMessagePoll()
 
   exec s:python_command "ycm_state.OnBufferVisit()"
   call s:OnFileReadyToParse( 1 )
@@ -464,6 +493,7 @@ function! s:OnBufferEnter()
 
   call s:SetUpCompleteopt()
   call s:SetCompleteFunc()
+  call s:StartMessagePoll()
 
   exec s:python_command "ycm_state.OnBufferVisit()"
   " Last parse may be outdated because of changes from other buffers. Force a
@@ -475,13 +505,17 @@ endfunction
 function! s:OnBufferUnload()
   " Expanding <abuf> returns the unloaded buffer number as a string but we want
   " it as a true number for the getbufvar function.
-  if !s:AllowedToCompleteInBuffer( str2nr( expand( '<abuf>' ) ) )
+  let buffer_number = str2nr( expand( '<abuf>' ) )
+  if !s:AllowedToCompleteInBuffer( buffer_number )
     return
   endif
 
-  let deleted_buffer_file = expand( '<afile>:p' )
-  exec s:python_command "ycm_state.OnBufferUnload(" .
-        \ "vim.eval( 'deleted_buffer_file' ) )"
+  exec s:python_command "ycm_state.OnBufferUnload( " . buffer_number . " )"
+endfunction
+
+
+function! s:UpdateMatches()
+  exec s:python_command "ycm_state.UpdateMatches()"
 endfunction
 
 
@@ -546,11 +580,16 @@ function! s:SendKeys( keys )
 endfunction
 
 
-function! s:OnInsertChar()
-  call timer_stop( s:pollers.completion.id )
+function! s:CloseCompletionMenu()
   if pumvisible()
     call s:SendKeys( "\<C-e>" )
   endif
+endfunction
+
+
+function! s:OnInsertChar()
+  call timer_stop( s:pollers.completion.id )
+  call s:CloseCompletionMenu()
 endfunction
 
 
@@ -751,25 +790,26 @@ endfunction
 
 
 function! s:Complete()
-  " <c-x><c-u> invokes the user's completion function (which we have set to
-  " youcompleteme#CompleteFunc), and <c-p> tells Vim to select the previous
-  " completion candidate. This is necessary because by default, Vim selects the
-  " first candidate when completion is invoked, and selecting a candidate
-  " automatically replaces the current text with it. Calling <c-p> forces Vim to
-  " deselect the first candidate and in turn preserve the user's current text
-  " until he explicitly chooses to replace it with a completion.
-  call s:SendKeys( "\<C-X>\<C-U>\<C-P>" )
+  " Do not call user's completion function if the start column is after the
+  " current column or if there are no candidates. Close the completion menu
+  " instead. This avoids keeping the user in completion mode.
+  if s:completion.start_column > col( '.' ) || empty( s:completion.candidates )
+    call s:CloseCompletionMenu()
+  else
+    " <c-x><c-u> invokes the user's completion function (which we have set to
+    " youcompleteme#CompleteFunc), and <c-p> tells Vim to select the previous
+    " completion candidate. This is necessary because by default, Vim selects the
+    " first candidate when completion is invoked, and selecting a candidate
+    " automatically replaces the current text with it. Calling <c-p> forces Vim to
+    " deselect the first candidate and in turn preserve the user's current text
+    " until he explicitly chooses to replace it with a completion.
+    call s:SendKeys( "\<C-X>\<C-U>\<C-P>" )
+  endif
 endfunction
 
 
 function! youcompleteme#CompleteFunc( findstart, base )
   if a:findstart
-    if s:completion.start_column > col( '.' ) ||
-          \ empty( s:completion.candidates )
-      " For vim, -2 means not found but don't trigger an error message.
-      " See :h complete-functions.
-      return -2
-    endif
     return s:completion.start_column - 1
   endif
   return s:completion.candidates
@@ -786,8 +826,11 @@ function! s:SetUpCommands()
   command! YcmDebugInfo call s:DebugInfo()
   command! -nargs=* -complete=custom,youcompleteme#LogsComplete
         \ YcmToggleLogs call s:ToggleLogs(<f-args>)
-  command! -nargs=* -complete=custom,youcompleteme#SubCommandsComplete
-        \ YcmCompleter call s:CompleterCommand(<f-args>)
+  command! -nargs=* -complete=custom,youcompleteme#SubCommandsComplete -range
+        \ YcmCompleter call s:CompleterCommand(<count>,
+        \                                      <line1>,
+        \                                      <line2>,
+        \                                      <f-args>)
   command! YcmDiags call s:ShowDiagnostics()
   command! YcmShowDetailedDiagnostic call s:ShowDetailedDiagnostic()
   command! YcmForceCompileAndDiagnostics call s:ForceCompileAndDiagnostics()
@@ -796,6 +839,10 @@ endfunction
 
 function! s:RestartServer()
   exec s:python_command "ycm_state.RestartServer()"
+
+  call timer_stop( s:pollers.receive_messages.id )
+  let s:pollers.receive_messages.id = -1
+
   call timer_stop( s:pollers.server_ready.id )
   let s:pollers.server_ready.id = timer_start(
         \ s:pollers.server_ready.wait_milliseconds,
@@ -822,14 +869,14 @@ function! youcompleteme#LogsComplete( arglead, cmdline, cursorpos )
 endfunction
 
 
-function! s:CompleterCommand(...)
-  " CompleterCommand will call the OnUserCommand function of a completer.
-  " If the first arguments is of the form "ft=..." it can be used to specify the
-  " completer to use (for example "ft=cpp").  Else the native filetype completer
-  " of the current buffer is used.  If no native filetype completer is found and
-  " no completer was specified this throws an error.  You can use
-  " "ft=ycm:ident" to select the identifier completer.
-  " The remaining arguments will be passed to the completer.
+function! s:CompleterCommand( count, line1, line2, ... )
+  " CompleterCommand will call the OnUserCommand function of a completer. If
+  " the first arguments is of the form "ft=..." it can be used to specify the
+  " completer to use (for example "ft=cpp"). Else the native filetype completer
+  " of the current buffer is used. If no native filetype completer is found and
+  " no completer was specified this throws an error. You can use "ft=ycm:ident"
+  " to select the identifier completer. The remaining arguments will be passed
+  " to the completer.
   let arguments = copy(a:000)
   let completer = ''
 
@@ -841,7 +888,11 @@ function! s:CompleterCommand(...)
   endif
 
   exec s:python_command "ycm_state.SendCommandRequest(" .
-        \ "vim.eval( 'l:arguments' ), vim.eval( 'l:completer' ) )"
+        \ "vim.eval( 'l:arguments' )," .
+        \ "vim.eval( 'l:completer' )," .
+        \ "vimsupport.GetBoolValue( 'a:count != -1' )," .
+        \ "vimsupport.GetIntValue( 'a:line1' )," .
+        \ "vimsupport.GetIntValue( 'a:line2' ) )"
 endfunction
 
 

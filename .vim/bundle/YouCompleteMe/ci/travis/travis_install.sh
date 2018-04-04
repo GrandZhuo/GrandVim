@@ -2,18 +2,28 @@
 
 set -ev
 
-####################
-# OS-specific setup
-####################
+# RVM overrides the cd, popd, and pushd shell commands, causing the
+# "shell_session_update: command not found" error on macOS when executing those
+# commands.
+unset -f cd popd pushd
 
-# Requirements of OS-specific install:
-#  - install any software which is not installed by Travis configuration
-#  - set up everything necessary so that pyenv can build python
-source ci/travis/travis_install.${TRAVIS_OS_NAME}.sh
+################
+# Compiler setup
+################
 
-#############
-# pyenv setup
-#############
+# We can't use sudo, so we have to approximate the behaviour of setting the
+# default system compiler.
+
+mkdir -p ${HOME}/bin
+
+ln -s /usr/bin/g++-4.8 ${HOME}/bin/c++
+ln -s /usr/bin/gcc-4.8 ${HOME}/bin/cc
+
+export PATH=${HOME}/bin:${PATH}
+
+##############
+# Python setup
+##############
 
 PYENV_ROOT="${HOME}/.pyenv"
 
@@ -23,20 +33,24 @@ if [ ! -d "${PYENV_ROOT}/.git" ]; then
 fi
 pushd ${PYENV_ROOT}
 git fetch --tags
-git checkout v1.0.8
+git checkout v1.2.1
 popd
 
 export PATH="${PYENV_ROOT}/bin:${PATH}"
 
 eval "$(pyenv init -)"
 
-if [ "${YCM_PYTHON_VERSION}" == "2.6" ]; then
-  PYENV_VERSION="2.6.6"
-elif [ "${YCM_PYTHON_VERSION}" == "2.7" ]; then
-  PYENV_VERSION="2.7.6"
+if [ "${YCM_PYTHON_VERSION}" == "2.7" ]; then
+  # Tests are failing on Python 2.7.0 with the exception
+  # "TypeError: argument can't be <type 'unicode'>"
+  PYENV_VERSION="2.7.1"
 else
-  PYENV_VERSION="3.3.6"
+  PYENV_VERSION="3.4.0"
 fi
+
+# In order to work with ycmd, python *must* be built as a shared library. This
+# is set via the PYTHON_CONFIGURE_OPTS option.
+export PYTHON_CONFIGURE_OPTS="--enable-shared"
 
 pyenv install --skip-existing ${PYENV_VERSION}
 pyenv rehash
@@ -48,10 +62,6 @@ pyenv global ${PYENV_VERSION}
 python_version=$(python -c 'import sys; print( "{0}.{1}".format( sys.version_info[0], sys.version_info[1] ) )')
 echo "Checking python version (actual ${python_version} vs expected ${YCM_PYTHON_VERSION})"
 test ${python_version} == ${YCM_PYTHON_VERSION}
-
-############
-# pip setup
-############
 
 pip install -U pip wheel setuptools
 pip install -r python/test_requirements.txt

@@ -8,13 +8,14 @@ import os
 import types
 from functools import partial
 
-from jedi._compatibility import builtins as _builtins, unicode
+from jedi._compatibility import builtins as _builtins, unicode, py_version
 from jedi import debug
 from jedi.cache import underscore_memoization, memoize_method
 from jedi.evaluate.filters import AbstractFilter, AbstractNameDefinition, \
     ContextNameMixin
-from jedi.evaluate.context import Context, LazyKnownContext
-from jedi.evaluate.compiled.getattr_static import  getattr_static
+from jedi.evaluate.base_context import Context, ContextSet
+from jedi.evaluate.lazy_context import LazyKnownContext
+from jedi.evaluate.compiled.getattr_static import getattr_static
 from . import fake
 
 
@@ -82,10 +83,10 @@ class CompiledObject(Context):
     @CheckAttribute
     def py__call__(self, params):
         if inspect.isclass(self.obj):
-            from jedi.evaluate.instance import CompiledInstance
-            return set([CompiledInstance(self.evaluator, self.parent_context, self, params)])
+            from jedi.evaluate.context import CompiledInstance
+            return ContextSet(CompiledInstance(self.evaluator, self.parent_context, self, params))
         else:
-            return set(self._execute_function(params))
+            return ContextSet.from_iterable(self._execute_function(params))
 
     @CheckAttribute
     def py__class__(self):
@@ -115,13 +116,38 @@ class CompiledObject(Context):
         return inspect.getdoc(self.obj) or ''
 
     def get_param_names(self):
-        params_str, ret = self._parse_function_doc()
-        tokens = params_str.split(',')
-        if inspect.ismethoddescriptor(self.obj):
-            tokens.insert(0, 'self')
-        for p in tokens:
-            parts = p.strip().split('=')
-            yield UnresolvableParamName(self, parts[0])
+        obj = self.obj
+        try:
+            if py_version < 33:
+                raise ValueError("inspect.signature was introduced in 3.3")
+            if py_version == 34:
+                # In 3.4 inspect.signature are wrong for str and int. This has
+                # been fixed in 3.5. The signature of object is returned,
+                # because no signature was found for str. Here we imitate 3.5
+                # logic and just ignore the signature if the magic methods
+                # don't match object.
+                # 3.3 doesn't even have the logic and returns nothing for str
+                # and classes that inherit from object.
+                user_def = inspect._signature_get_user_defined_method
+                if (inspect.isclass(obj)
+                        and not user_def(type(obj), '__init__')
+                        and not user_def(type(obj), '__new__')
+                        and (obj.__init__ != object.__init__
+                             or obj.__new__ != object.__new__)):
+                    raise ValueError
+
+            signature = inspect.signature(obj)
+        except ValueError:  # Has no signature
+            params_str, ret = self._parse_function_doc()
+            tokens = params_str.split(',')
+            if inspect.ismethoddescriptor(obj):
+                tokens.insert(0, 'self')
+            for p in tokens:
+                parts = p.strip().split('=')
+                yield UnresolvableParamName(self, parts[0])
+        else:
+            for signature_param in signature.parameters.values():
+                yield SignatureParamName(self, signature_param)
 
     def __repr__(self):
         return '<%s: %s>' % (self.__class__.__name__, repr(self.obj))
@@ -196,9 +222,9 @@ class CompiledObject(Context):
     def py__getitem__(self, index):
         if type(self.obj) not in (str, list, tuple, unicode, bytes, bytearray, dict):
             # Get rid of side effects, we won't call custom `__getitem__`s.
-            return set()
+            return ContextSet()
 
-        return set([create(self.evaluator, self.obj[index])])
+        return ContextSet(create(self.evaluator, self.obj[index]))
 
     @CheckAttribute
     def py__iter__(self):
@@ -206,7 +232,10 @@ class CompiledObject(Context):
             # Get rid of side effects, we won't call custom `__getitem__`s.
             return
 
-        for part in self.obj:
+        for i, part in enumerate(self.obj):
+            if i > 20:
+                # Should not go crazy with large iterators
+                break
             yield LazyKnownContext(create(self.evaluator, part))
 
     def py__name__(self):
@@ -224,9 +253,9 @@ class CompiledObject(Context):
         return CompiledContextName(self, name)
 
     def _execute_function(self, params):
+        from jedi.evaluate import docstrings
         if self.type != 'funcdef':
             return
-
         for name in self._parse_function_doc()[1].split():
             try:
                 bltn_obj = getattr(_builtins, name)
@@ -238,14 +267,21 @@ class CompiledObject(Context):
                     # TODO do we?
                     continue
                 bltn_obj = create(self.evaluator, bltn_obj)
-                for result in self.evaluator.execute(bltn_obj, params):
+                for result in bltn_obj.execute(params):
                     yield result
+        for type_ in docstrings.infer_return_types(self):
+            yield type_
 
     def get_self_attributes(self):
         return []  # Instance compatibility
 
     def get_imports(self):
         return []  # Builtins don't have imports
+
+    def dict_values(self):
+        return ContextSet.from_iterable(
+            create(self.evaluator, v) for v in self.obj.values()
+        )
 
 
 class CompiledName(AbstractNameDefinition):
@@ -268,7 +304,32 @@ class CompiledName(AbstractNameDefinition):
     @underscore_memoization
     def infer(self):
         module = self.parent_context.get_root_context()
-        return [_create_from_name(self._evaluator, module, self.parent_context, self.string_name)]
+        return ContextSet(_create_from_name(
+            self._evaluator, module, self.parent_context, self.string_name
+        ))
+
+
+class SignatureParamName(AbstractNameDefinition):
+    api_type = 'param'
+
+    def __init__(self, compiled_obj, signature_param):
+        self.parent_context = compiled_obj.parent_context
+        self._signature_param = signature_param
+
+    @property
+    def string_name(self):
+        return self._signature_param.name
+
+    def infer(self):
+        p = self._signature_param
+        evaluator = self.parent_context.evaluator
+        contexts = ContextSet()
+        if p.default is not p.empty:
+            contexts = ContextSet(create(evaluator, p.default))
+        if p.annotation is not p.empty:
+            annotation = create(evaluator, p.annotation)
+            contexts |= annotation.execute_evaluated()
+        return contexts
 
 
 class UnresolvableParamName(AbstractNameDefinition):
@@ -279,7 +340,7 @@ class UnresolvableParamName(AbstractNameDefinition):
         self.string_name = name
 
     def infer(self):
-        return set()
+        return ContextSet()
 
 
 class CompiledContextName(ContextNameMixin, AbstractNameDefinition):
@@ -300,7 +361,7 @@ class EmptyCompiledName(AbstractNameDefinition):
         self.string_name = name
 
     def infer(self):
-        return []
+        return ContextSet()
 
 
 class CompiledObjectFilter(AbstractFilter):
@@ -383,15 +444,11 @@ def dotted_from_fs_path(fs_path, sys_path):
 
 
 def load_module(evaluator, path=None, name=None):
-    sys_path = evaluator.sys_path
+    sys_path = list(evaluator.project.sys_path)
     if path is not None:
         dotted_path = dotted_from_fs_path(path, sys_path=sys_path)
     else:
         dotted_path = name
-
-    if dotted_path is None:
-        p, _, dotted_path = path.partition(os.path.sep)
-        sys_path.insert(0, p)
 
     temp, sys.path = sys.path, sys_path
     try:
@@ -492,7 +549,7 @@ def _create_from_name(evaluator, module, compiled_object, name):
     try:
         faked = fake.get_faked(evaluator, module, obj, parent_context=compiled_object, name=name)
         if faked.type == 'funcdef':
-            from jedi.evaluate.representation import FunctionContext
+            from jedi.evaluate.context.function import FunctionContext
             return FunctionContext(evaluator, compiled_object, faked)
     except fake.FakeDoesNotExist:
         pass
@@ -573,7 +630,7 @@ def create(evaluator, obj, parent_context=None, module=None, faked=None):
         try:
             faked = fake.get_faked(evaluator, module, obj, parent_context=parent_context)
             if faked.type == 'funcdef':
-                from jedi.evaluate.representation import FunctionContext
+                from jedi.evaluate.context.function import FunctionContext
                 return FunctionContext(evaluator, parent_context, faked)
         except fake.FakeDoesNotExist:
             pass

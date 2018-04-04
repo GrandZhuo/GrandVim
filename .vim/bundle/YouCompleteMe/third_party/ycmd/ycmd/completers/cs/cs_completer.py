@@ -398,12 +398,12 @@ class CsharpSolutionCompleter( object ):
       if self._ServerIsRunning():
         self._logger.info( 'Stopping OmniSharp server with PID {0}'.format(
                                self._omnisharp_phandle.pid ) )
-        self._GetResponse( '/stopserver' )
         try:
+          self._GetResponse( '/stopserver' )
           utils.WaitUntilProcessIsTerminated( self._omnisharp_phandle,
                                               timeout = 5 )
           self._logger.info( 'OmniSharp server stopped' )
-        except RuntimeError:
+        except Exception:
           self._logger.exception( 'Error while stopping OmniSharp server' )
 
       self._CleanUp()
@@ -678,8 +678,12 @@ def _IndexToLineColumn( text, index ):
 
 
 def _BuildLocation( request_data, filename, line_num, column_num ):
-  if line_num <= 0 or column_num <= 0:
+  if line_num <= 0:
     return None
+  # OmniSharp sometimes incorrectly returns 0 for the column number. Assume the
+  # column is 1 in that case.
+  if column_num <= 0:
+    column_num = 1
   contents = utils.SplitLines( GetFileContents( request_data, filename ) )
   line_value = contents[ line_num - 1 ]
   return responses.Location(

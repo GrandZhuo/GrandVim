@@ -57,8 +57,8 @@ Supported Python Features
 - Django / Flask / Buildout support
 
 
-Unsupported Features
---------------------
+Not Supported
+-------------
 
 Not yet implemented:
 
@@ -77,21 +77,6 @@ Will probably never be implemented:
 Caveats
 -------
 
-**Malformed Syntax**
-
-Syntax errors and other strange stuff may lead to undefined behaviour of the
-completion. |jedi| is **NOT** a Python compiler, that tries to correct you. It
-is a tool that wants to help you. But **YOU** have to know Python, not |jedi|.
-
-**Legacy Python 2 Features**
-
-This framework should work for both Python 2/3. However, some things were just
-not as *pythonic* in Python 2 as things should be. To keep things simple, some
-older Python 2 features have been left out:
-
-- Classes: Always Python 3 like, therefore all classes inherit from ``object``.
-- Generators: No ``next()`` method. The ``__next__()`` method is used instead.
-
 **Slow Performance**
 
 Importing ``numpy`` can be quite slow sometimes, as well as loading the
@@ -109,7 +94,7 @@ option than to execute those modules. However: Execute isn't that critical (as
 e.g. in pythoncomplete, which used to execute *every* import!), because it
 means one import and no more.  So basically the only dangerous thing is using
 the import itself. If your ``c_builtin`` uses some strange initializations, it
-might be dangerous. But if it does you're screwed anyways, because eventualy
+might be dangerous. But if it does you're screwed anyways, because eventually
 you're going to execute your code, which executes the import.
 
 
@@ -237,7 +222,7 @@ A little history
 
 The Star Wars Jedi are awesome. My Jedi software tries to imitate a little bit
 of the precognition the Jedi have. There's even an awesome `scene
-<http://www.youtube.com/watch?v=5BDO3pyavOY>`_ of Monty Python Jedis :-).
+<https://youtu.be/yHRJLIf7wMU>`_ of Monty Python Jedis :-).
 
 But actually the name hasn't so much to do with Star Wars. It's part of my
 second name.
