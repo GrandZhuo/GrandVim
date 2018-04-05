@@ -80,6 +80,7 @@ filetype plugin indent on    " required
 " autocmd BufWritePost $MYVIMRC source $MYVIMRC
 
 " 编码
+set encoding=utf-8
 set fileencodings=ucs-bom,utf-8,utf-16,gbk,big5,gb18030,latin1
 
 " 主题
@@ -181,7 +182,7 @@ runtime macros/matchit.vim
 
 " 创建快捷键关闭高亮功能"
 "nnoremap <silent> <C-l>	:<C-u>nohlsearch<CR><C-l>
-nnoremap <leader>nf :nohlsearch<CR>
+nnoremap <leader>nh :nohlsearch<CR>
 
 " 每次保存文件时调用ctags
 "autocmd BufWritePost * call system("ctags -R")
@@ -244,6 +245,9 @@ set wildmenu
 
 " sudo权限写文件
 cmap w!! w !sudo tee % > /dev/null
+
+" 浏览目录
+:command E Explore
 
 
 "**********************************************************************
