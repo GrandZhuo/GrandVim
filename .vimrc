@@ -10,7 +10,7 @@ filetype off                  " required
 set rtp+=~/.vim/bundle/Vundle.vim
 call vundle#begin()
 " alternatively, pass a path where Vundle should install plugins
-"call vundle#begin('~/some/path/here')
+" call vundle#begin('~/some/path/here')
 
 " let Vundle manage Vundle, required
 Plugin 'VundleVim/Vundle.vim'
@@ -154,8 +154,8 @@ set rnu
 nnoremap <leader>nr :set nornu<CR>
 
 "插入模式下用绝对行号, 普通模式下用相对
-autocmd InsertEnter * :set norelativenumber number
-autocmd InsertLeave * :set relativenumber
+"autocmd InsertEnter * :set norelativenumber number
+"autocmd InsertLeave * :set relativenumber
 
 " 设置历史记录保存数量
 set history=200
@@ -246,9 +246,23 @@ set wildmenu
 " sudo权限写文件
 cmap w!! w !sudo tee % > /dev/null
 
+
+"**********************************************************************
+"                             自定义命令                              *
+"**********************************************************************
 " 浏览目录
 :command E Explore
 
+" turn off YCM
+:command Closeycm :let g:ycm_auto_trigger=0
+
+" turn on YCM
+:command Openycm :let g:ycm_auto_trigger=1
+
+" 加载man插件
+source $VIMRUNTIME/ftplugin/man.vim
+" man快捷键
+nnoremap <leader>man :Man 3 <cword><CR>
 
 "**********************************************************************
 "                             Macvim配置                              *
@@ -269,7 +283,7 @@ set guifont=Menlo:h15
 "                             vim-fswitch                             *
 "**********************************************************************
 " *.cpp 和 *.h 间切换
-nnoremap <silent> <leader>di :w<CR>:FSHere<CR>
+nnoremap <silent> <leader>gh :w<CR>:FSHere<CR>
 
 
 "**********************************************************************
@@ -361,7 +375,9 @@ let g:indexer_dontUpdateTagsIfFileExists=1
 "**********************************************************************
 "                            NERDComComment                           *
 "**********************************************************************
-map <leader>mm <plug>NERDCommenterToggle
+nmap <leader>mm <plug>NERDCommenterToggle
+
+nmap <leader>\ <plug>NERDCommenterComment " 取消快捷键绑定
 
 "[count]|<Leader>|cm |NERDComMinimalComment|
 "Comments the given lines using only one set of multipart delimiters.
@@ -532,7 +548,7 @@ set undofile
 nnoremap <leader>ss :mksession! .my.vim<CR> :wviminfo! .my.viminfo<CR>
 
 " 恢复快捷键
-nnoremap <leader>rs :source .my.vim<CR> :rviminfo .my.viminfo<CR>
+nnoremap <leader>sr :source .my.vim<CR> :rviminfo .my.viminfo<CR>
 
 
 "**********************************************************************
@@ -579,10 +595,13 @@ let g:ycm_python_binary_path = '/usr/local/bin/python3'
 "关闭加载.ycm_extra_conf.py提示
 let g:ycm_confirm_extra_conf=0
 
-"跳转，只能是 #include 或已打开的文件
+" 跳转，只能是 #include 或已打开的文件
 nnoremap <leader>gd :YcmCompleter GoToDefinitionElseDeclaration<CR>   
 nnoremap <leader>gf :YcmCompleter GoToDefinition<CR>	" 跳转到定义
 nnoremap <leader>gl :YcmCompleter goToDeclaration<CR>	" 跳转到申明
+
+" 修复错误
+nnoremap <leader>fi :YcmCompleter FixIt<CR>
 
 " 打开vim时不再询问是否加载ycm_extra_conf.py配置
 let g:ycm_confirm_extra_conf=0   
@@ -591,7 +610,9 @@ let g:ycm_confirm_extra_conf=0
 let g:ycm_collect_identifiers_from_tag_files = 1 
 
 " YCM查错
-nnoremap <leader>f4 :YcmDiags<CR>
+nnoremap <leader>di :YcmDiags<CR>
+nnoremap <leader>sh :YcmShowDetailedDiagnostic<CR>
+let g:ycm_echo_current_diagnostic = 1
 
 " 自动补全配置
 " 让Vim的补全菜单行为与一般IDE一致(参考VimTip1228)
@@ -682,7 +703,7 @@ let g:jedi#completions_command = "<C-k>"
 "**********************************************************************
 "                               ici词典                               *
 "**********************************************************************
-nmap <Leader>y :!echo "                  --==  <C-R><C-w>  ==-- ";ici <C-R><C-W><CR>
+nmap <Leader>i :!echo "                  --==  <C-R><C-w>  ==-- ";ici <C-R><C-W><CR>
 
 
 "**********************************************************************
@@ -750,7 +771,7 @@ nnoremap <leader>q :q<CR>
 nnoremap <leader>fd :find 
 
 " 切换窗口
-nnoremap <C-j> <C-w>j
+"nnoremap <C-j> <C-w>j
 nnoremap <C-k> <C-w>k
 nnoremap <C-h> <C-w>h
 nnoremap <C-l> <C-w>l
@@ -760,10 +781,10 @@ nnoremap <leader>bn :bNext<CR>
 nnoremap <leader>bp :bprevious<CR>
 
 " 打开quickfix列表
-nnoremap <leader>co :copen<CR>
+nnoremap <leader>oq :copen<CR>
 
 " 关闭quickfix列表
-nnoremap <leader>ccl :cclose<CR>
+nnoremap <leader>cq :cclose<CR>
 
 " 映射全选+复制 ctrl+a
 "map <C-A> ggVGY
@@ -773,7 +794,7 @@ nnoremap <leader>ccl :cclose<CR>
 "vmap <C-c> "+y
 
 " 关闭窗口
-"nnoremap <leader>cl :close<CR> " 被NERDcomment占用，使用<leader>q即可
+map <leader>cc :close<CR>
 
 "**********************************************************************
 "                               文件命令                              *

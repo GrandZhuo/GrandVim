@@ -1,4 +1,4 @@
-# Copyright (C) 2017 ycmd contributors
+# Copyright (C) 2017-2018 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -31,7 +31,7 @@ import queue
 import threading
 
 from ycmd.completers.completer import Completer
-from ycmd.completers.completer_utils import GetFileContents
+from ycmd.completers.completer_utils import GetFileContents, GetFileLines
 from ycmd import utils
 from ycmd import responses
 
@@ -259,7 +259,7 @@ class LanguageServerConnection( threading.Thread ):
       self._connection_event.set()
 
       # Blocking loop which reads whole messages and calls _DispatchMessage
-      self._ReadMessages( )
+      self._ReadMessages()
     except LanguageServerConnectionStopped:
       # Abort any outstanding requests
       with self._response_mutex:
@@ -597,6 +597,9 @@ class LanguageServerCompleter( Completer ):
   Completions
 
   - The implementation should not require any code to support completions
+  - (optional) Override GetCodepointForCompletionRequest if you wish to change
+    the completion position (e.g. if you want to pass the "query" to the
+    server)
 
   Diagnostics
 
@@ -634,7 +637,7 @@ class LanguageServerCompleter( Completer ):
     pass # pragma: no cover
 
 
-  def __init__( self, user_options):
+  def __init__( self, user_options ):
     super( LanguageServerCompleter, self ).__init__( user_options )
 
     # _server_info_mutex synchronises access to the state of the
@@ -664,7 +667,7 @@ class LanguageServerCompleter( Completer ):
       self._sync_type = 'Full'
       self._initialize_response = None
       self._initialize_event = threading.Event()
-      self._on_initialize_complete_handlers = list()
+      self._on_initialize_complete_handlers = []
       self._server_capabilities = None
       self._resolve_completion_items = False
 
@@ -733,6 +736,12 @@ class LanguageServerCompleter( Completer ):
                request_data ) )
 
 
+  def GetCodepointForCompletionRequest( self, request_data ):
+    """Returns the 1-based codepoint offset on the current line at which to make
+    the completion request"""
+    return request_data[ 'start_codepoint' ]
+
+
   def ComputeCandidatesInner( self, request_data ):
     if not self.ServerIsReady():
       return None
@@ -740,7 +749,11 @@ class LanguageServerCompleter( Completer ):
     self._UpdateServerWithFileContents( request_data )
 
     request_id = self.GetConnection().NextRequestId()
-    msg = lsp.Completion( request_id, request_data )
+
+    msg = lsp.Completion(
+      request_id,
+      request_data,
+      self.GetCodepointForCompletionRequest( request_data ) )
     response = self.GetConnection().GetResponse( request_id,
                                                  msg,
                                                  REQUEST_TIMEOUT_COMPLETION )
@@ -821,9 +834,9 @@ class LanguageServerCompleter( Completer ):
     # Significant completions, such as imports, do not work without it in
     # jdt.ls.
     #
-    completions = list()
-    start_codepoints = list()
-    unique_start_codepoints = list()
+    completions = []
+    start_codepoints = []
+    unique_start_codepoints = []
     min_start_codepoint = request_data[ 'start_codepoint' ]
 
     # Resolving takes some time, so only do it if there are fewer than 100
@@ -898,11 +911,14 @@ class LanguageServerCompleter( Completer ):
     # polling mechanism.
     filepath = request_data[ 'filepath' ]
     uri = lsp.FilePathToUri( filepath )
-    contents = utils.SplitLines( GetFileContents( request_data, filepath ) )
+    contents = GetFileLines( request_data, filepath )
     with self._server_info_mutex:
       if uri in self._latest_diagnostics:
-        return [ _BuildDiagnostic( contents, uri, diag )
-                 for diag in self._latest_diagnostics[ uri ] ]
+        diagnostics = [ _BuildDiagnostic( contents, uri, diag )
+                        for diag in self._latest_diagnostics[ uri ] ]
+        return responses.BuildDiagnosticResponse(
+          diagnostics, filepath, self.max_diagnostics_to_display )
+
 
 
   def PollForMessagesInner( self, request_data, timeout ):
@@ -919,7 +935,7 @@ class LanguageServerCompleter( Completer ):
     """Convert any pending notifications to messages and return them in a list.
     If there are no messages pending, returns an empty list. Returns False if an
     error occurred and no further polling should be attempted."""
-    messages = list()
+    messages = []
 
     if not self._initialize_event.is_set():
       # The request came before we started up, there cannot be any messages
@@ -932,7 +948,7 @@ class LanguageServerCompleter( Completer ):
           # The server isn't running or something. Don't re-poll.
           return False
 
-        notification = self.GetConnection()._notifications.get_nowait( )
+        notification = self.GetConnection()._notifications.get_nowait()
         message = self.ConvertNotificationToMessage( request_data,
                                                      notification )
 
@@ -1025,13 +1041,15 @@ class LanguageServerCompleter( Completer ):
 
       with self._server_info_mutex:
         if filepath in self._server_file_state:
-          contents = self._server_file_state[ filepath ].contents
+          contents = utils.SplitLines(
+            self._server_file_state[ filepath ].contents )
         else:
-          contents = GetFileContents( request_data, filepath )
-      contents = utils.SplitLines( contents )
+          contents = GetFileLines( request_data, filepath )
+      diagnostics = [ _BuildDiagnostic( contents, uri, x )
+                      for x in params[ 'diagnostics' ] ]
       return {
-        'diagnostics': [ _BuildDiagnostic( contents, uri, x )
-                         for x in params[ 'diagnostics' ] ],
+        'diagnostics': responses.BuildDiagnosticResponse(
+          diagnostics, filepath, self.max_diagnostics_to_display ),
         'filepath': filepath
       }
 
@@ -1099,7 +1117,7 @@ class LanguageServerCompleter( Completer ):
 
 
   def _UpdateSavedFilesUnderLock( self, request_data ):
-    files_to_purge = list()
+    files_to_purge = []
     for file_name, file_state in iteritems( self._server_file_state ):
       if file_name in request_data[ 'file_data' ]:
         continue
@@ -1194,7 +1212,7 @@ class LanguageServerCompleter( Completer ):
 
       request_id = self.GetConnection().NextRequestId()
       msg = lsp.Initialize( request_id,
-                            self._GetProjectDirectory( request_data  ) )
+                            self._GetProjectDirectory( request_data ) )
 
       def response_handler( response, message ):
         if message is None:
@@ -1259,7 +1277,7 @@ class LanguageServerCompleter( Completer ):
     for handler in self._on_initialize_complete_handlers:
       handler( self )
 
-    self._on_initialize_complete_handlers = list()
+    self._on_initialize_complete_handlers = []
 
 
   def _OnInitializeComplete( self, handler ):
@@ -1443,7 +1461,7 @@ class LanguageServerCompleter( Completer ):
                                                  message,
                                                  REQUEST_TIMEOUT_COMMAND )
     filepath = request_data[ 'filepath' ]
-    contents = utils.SplitLines( GetFileContents( request_data, filepath ) )
+    contents = GetFileLines( request_data, filepath )
     chunks = [ responses.FixItChunk( text_edit[ 'newText' ],
                                      _BuildRange( contents,
                                                   filepath,
@@ -1455,6 +1473,20 @@ class LanguageServerCompleter( Completer ):
                           request_data[ 'column_num' ],
                           request_data[ 'filepath' ] ),
       chunks ) ] )
+
+
+  def GetCommandResponse( self, request_data, command, arguments ):
+    if not self.ServerIsReady():
+      raise RuntimeError( 'Server is initializing. Please wait.' )
+
+    self._UpdateServerWithFileContents( request_data )
+
+    request_id = self.GetConnection().NextRequestId()
+    message = lsp.ExecuteCommand( request_id, command, arguments )
+    response = self.GetConnection().GetResponse( request_id,
+                                                 message,
+                                                 REQUEST_TIMEOUT_COMMAND )
+    return response[ 'result' ]
 
 
 def _CompletionItemToCompletionData( insertion_text, item, fixits ):
@@ -1569,7 +1601,7 @@ def _InsertionTextForItem( request_data, item ):
 
   if additional_text_edits:
     filepath = request_data[ 'filepath' ]
-    contents = utils.SplitLines( GetFileContents( request_data, filepath ) )
+    contents = GetFileLines( request_data, filepath )
     chunks = [ responses.FixItChunk( e[ 'newText' ],
                                      _BuildRange( contents,
                                                   filepath,
@@ -1671,8 +1703,7 @@ def _GetCompletionItemStartCodepointOrReject( text_edit, request_data ):
       "The TextEdit '{0}' spans multiple lines".format(
         text_edit[ 'newText' ] ) )
 
-  file_contents = utils.SplitLines(
-    GetFileContents( request_data, request_data[ 'filepath' ] ) )
+  file_contents = GetFileLines( request_data, request_data[ 'filepath' ] )
   line_value = file_contents[ edit_range[ 'start' ][ 'line' ] ]
 
   start_codepoint = lsp.UTF16CodeUnitsToCodepoints(
@@ -1713,8 +1744,7 @@ def _PositionToLocationAndDescription( request_data, position ):
   """Convert a LSP position to a ycmd location."""
   try:
     filename = lsp.UriToFilePath( position[ 'uri' ] )
-    file_contents = utils.SplitLines( GetFileContents( request_data,
-                                                       filename ) )
+    file_contents = GetFileLines( request_data, filename )
   except lsp.InvalidUriException:
     _logger.debug( "Invalid URI, file contents not available in GoTo" )
     filename = ''
@@ -1776,12 +1806,12 @@ def _BuildDiagnostic( contents, uri, diag ):
 
   r = _BuildRange( contents, filename, diag[ 'range' ] )
 
-  return responses.BuildDiagnosticData( responses.Diagnostic(
+  return responses.Diagnostic(
     ranges = [ r ],
     location = r.start_,
     location_extent = r,
     text = diag[ 'message' ],
-    kind = lsp.SEVERITY[ diag[ 'severity' ] ].upper() ) )
+    kind = lsp.SEVERITY[ diag[ 'severity' ] ].upper() )
 
 
 def TextEditToChunks( request_data, uri, text_edit ):
@@ -1792,7 +1822,7 @@ def TextEditToChunks( request_data, uri, text_edit ):
     _logger.debug( 'Invalid filepath received in TextEdit' )
     filepath = ''
 
-  contents = utils.SplitLines( GetFileContents( request_data, filepath ) )
+  contents = GetFileLines( request_data, filepath )
   return [
     responses.FixItChunk( change[ 'newText' ],
                           _BuildRange( contents,
@@ -1809,7 +1839,7 @@ def WorkspaceEditToFixIt( request_data, workspace_edit, text='' ):
   if 'changes' not in workspace_edit:
     return None
 
-  chunks = list()
+  chunks = []
   # We sort the filenames to make the response stable. Edits are applied in
   # strict sequence within a file, but apply to files in arbitrary order.
   # However, it's important for the response to be stable for the tests.

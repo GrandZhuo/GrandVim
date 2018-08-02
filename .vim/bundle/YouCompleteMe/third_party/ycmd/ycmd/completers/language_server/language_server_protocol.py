@@ -1,4 +1,4 @@
-# Copyright (C) 2017 ycmd contributors
+# Copyright (C) 2017-2018 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -28,7 +28,6 @@ import hashlib
 
 from ycmd.utils import ( ByteOffsetToCodepointOffset,
                          pathname2url,
-                         SplitLines,
                          ToBytes,
                          ToUnicode,
                          url2pathname,
@@ -253,15 +252,14 @@ def DidCloseTextDocument( file_state ):
   } )
 
 
-def Completion( request_id, request_data ):
+def Completion( request_id, request_data, codepoint ):
   return BuildRequest( request_id, 'textDocument/completion', {
     'textDocument': {
       'uri': FilePathToUri( request_data[ 'filepath' ] ),
     },
-    'position': {
-      'line': request_data[ 'line_num' ] - 1,
-      'character': request_data[ 'start_codepoint' ] - 1,
-    }
+    'position': Position( request_data[ 'line_num' ],
+                          request_data[ 'line_value' ],
+                          codepoint ),
   } )
 
 
@@ -358,8 +356,7 @@ def FormattingOptions( request_data ):
 
 
 def Range( request_data ):
-  filepath = request_data[ 'filepath' ]
-  lines = SplitLines( request_data[ 'file_data' ][ filepath ][ 'contents' ] )
+  lines = request_data[ 'lines' ]
 
   start = request_data[ 'range' ][ 'start' ]
   start_line_num = start[ 'line_num' ]
@@ -386,12 +383,19 @@ def Range( request_data ):
   }
 
 
+def ExecuteCommand( request_id, command, arguments ):
+  return BuildRequest( request_id, 'workspace/executeCommand', {
+    'command': command,
+    'arguments': arguments
+  } )
+
+
 def FilePathToUri( file_name ):
   return urljoin( 'file:', pathname2url( file_name ) )
 
 
 def UriToFilePath( uri ):
-  if uri [ : 5 ] != "file:":
+  if uri[ : 5 ] != "file:":
     raise InvalidUriException( uri )
 
   return os.path.abspath( url2pathname( uri[ 5 : ] ) )
@@ -404,7 +408,7 @@ def _BuildMessageData( message ):
   # JSON/YAML parser.
   data = ToBytes( json.dumps( message, sort_keys=True ) )
   packet = ToBytes( 'Content-Length: {0}\r\n'
-                    '\r\n'.format( len(data) ) ) + data
+                    '\r\n'.format( len( data ) ) ) + data
   return packet
 
 

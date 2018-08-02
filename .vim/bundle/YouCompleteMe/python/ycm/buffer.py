@@ -27,9 +27,9 @@ from ycm.client.event_notification import EventNotification
 from ycm.diagnostic_interface import DiagnosticInterface
 
 
-DIAGNOSTIC_UI_FILETYPES = set( [ 'cpp', 'cs', 'c', 'objc', 'objcpp',
-                                 'typescript' ] )
-DIAGNOSTIC_UI_ASYNC_FILETYPES = set( [ 'java' ] )
+DIAGNOSTIC_UI_FILETYPES = { 'cpp', 'cs', 'c', 'objc', 'objcpp', 'cuda',
+                            'javascript', 'typescript' }
+DIAGNOSTIC_UI_ASYNC_FILETYPES = { 'java' }
 
 
 # Emulates Vim buffer
@@ -64,6 +64,10 @@ class Buffer( object ):
 
   def NeedsReparse( self ):
     return self._parse_tick != self._ChangedTick()
+
+
+  def ShouldResendParseRequest( self ):
+    return bool( self._parse_request and self._parse_request.ShouldResend() )
 
 
   def UpdateDiagnostics( self, force=False ):
@@ -127,8 +131,7 @@ class BufferDict( dict ):
     new_value = self[ key ] = Buffer(
       key,
       self._user_options,
-      any( [ x in DIAGNOSTIC_UI_ASYNC_FILETYPES
-             for x in
-             vimsupport.GetBufferFiletypes( key ) ] ) )
+      any( x in DIAGNOSTIC_UI_ASYNC_FILETYPES
+           for x in vimsupport.GetBufferFiletypes( key ) ) )
 
     return new_value

@@ -23,6 +23,7 @@ from __future__ import absolute_import
 from builtins import *  # noqa
 
 from future.utils import iterkeys
+import contextlib
 import vim
 import os
 import json
@@ -33,6 +34,9 @@ from ycmd.utils import ( ByteOffsetToCodepointOffset, GetCurrentDirectory,
 from ycmd import user_options_store
 
 BUFFER_COMMAND_MAP = { 'same-buffer'      : 'edit',
+                       'split'            : 'split',
+                       # These commands are obsolete. :vertical or :tab should
+                       # be used with the 'split' command instead.
                        'horizontal-split' : 'split',
                        'vertical-split'   : 'vsplit',
                        'new-tab'          : 'tabedit' }
@@ -49,6 +53,8 @@ NO_SELECTION_MADE_MSG = "No valid selection was made; aborting."
 # value is then incremented for each new sign. This should prevent conflicts
 # with other plugins using signs.
 SIGN_BUFFER_ID_INITIAL_VALUE = 100000000
+# This holds the next sign's id to assign for each buffer.
+SIGN_ID_FOR_BUFFER = defaultdict( lambda: SIGN_BUFFER_ID_INITIAL_VALUE )
 
 SIGN_PLACE_REGEX = re.compile(
   r"^.*=(?P<line>\d+).*=(?P<id>\d+).*=(?P<name>Ycm\w+)$" )
@@ -204,6 +210,12 @@ def GetSignsInBuffer( buffer_number ):
   return signs
 
 
+def CreateSign( line, name, buffer_number ):
+  sign_id = SIGN_ID_FOR_BUFFER[ buffer_number ]
+  SIGN_ID_FOR_BUFFER[ buffer_number ] += 1
+  return DiagnosticSign( sign_id, line, name, buffer_number )
+
+
 def UnplaceSign( sign ):
   vim.command( 'sign unplace {0} buffer={1}'.format( sign.id,
                                                      sign.buffer_number ) )
@@ -281,36 +293,18 @@ def SetLocationList( diagnostics ):
   SetLocationListForWindow( 0, diagnostics )
 
 
-def GetWindowNumberForBufferDiagnostics( buffer_number ):
-  """Return an appropriate window number to use for displaying diagnostics
-  associated with the buffer number supplied. Always returns a valid window
-  number or 0 meaning the current window."""
-
-  # Location lists are associated with _windows_ not _buffers_. This makes a lot
-  # of sense, but YCM associates diagnostics with _buffers_, because it is the
-  # buffer that actually gets parsed.
-  #
-  # The heuristic we use is to determine any open window for a specified buffer,
-  # and set that. If there is no such window on the current tab page, we use the
-  # current window (by passing 0 as the window number)
-
-  if buffer_number == vim.current.buffer.number:
-    return 0
-
-  window_number = GetIntValue( "bufwinnr({0})".format( buffer_number ) )
-
-  if window_number < 0:
-    return 0
-
-  return window_number
+def GetWindowsForBufferNumber( buffer_number ):
+  """Return the list of windows containing the buffer with number
+  |buffer_number| for the current tab page."""
+  return [ window for window in vim.windows
+           if window.buffer.number == buffer_number ]
 
 
-def SetLocationListForBuffer( buffer_number, diagnostics ):
-  """Populate the location list of an apppropriate window for the supplied
-  buffer number. See SetLocationListForWindow for format of diagnostics."""
-  return SetLocationListForWindow(
-    GetWindowNumberForBufferDiagnostics( buffer_number ),
-    diagnostics )
+def SetLocationListsForBuffer( buffer_number, diagnostics ):
+  """Populate location lists for all windows containing the buffer with number
+  |buffer_number|. See SetLocationListForWindow for format of diagnostics."""
+  for window in GetWindowsForBufferNumber( buffer_number ):
+    SetLocationListForWindow( window.number, diagnostics )
 
 
 def SetLocationListForWindow( window_number, diagnostics ):
@@ -448,19 +442,25 @@ def EscapeFilepathForVimCommand( filepath ):
 
 
 # Both |line| and |column| need to be 1-based
-def TryJumpLocationInOpenedTab( filename, line, column ):
-  filepath = os.path.realpath( filename )
+def TryJumpLocationInTab( tab, filename, line, column ):
+  for win in tab.windows:
+    if GetBufferFilepath( win.buffer ) == filename:
+      vim.current.tabpage = tab
+      vim.current.window = win
+      vim.current.window.cursor = ( line, column - 1 )
 
+      # Center the screen on the jumped-to location
+      vim.command( 'normal! zz' )
+      return True
+  # 'filename' is not opened in this tab page
+  return False
+
+
+# Both |line| and |column| need to be 1-based
+def TryJumpLocationInTabs( filename, line, column ):
   for tab in vim.tabpages:
-    for win in tab.windows:
-      if GetBufferFilepath( win.buffer ) == filepath:
-        vim.current.tabpage = tab
-        vim.current.window = win
-        vim.current.window.cursor = ( line, column - 1 )
-
-        # Center the screen on the jumped-to location
-        vim.command( 'normal! zz' )
-        return True
+    if TryJumpLocationInTab( tab, filename, line, column ):
+      return True
   # 'filename' is not opened in any tab pages
   return False
 
@@ -473,8 +473,30 @@ def GetVimCommand( user_command, default = 'edit' ):
   return vim_command
 
 
+def JumpToFile( filename, command, modifiers ):
+  vim_command = GetVimCommand( command )
+  try:
+    escaped_filename = EscapeFilepathForVimCommand( filename )
+    vim.command( 'keepjumps {} {} {}'.format( modifiers,
+                                              vim_command,
+                                              escaped_filename ) )
+  # When the file we are trying to jump to has a swap file
+  # Vim opens swap-exists-choices dialog and throws vim.error with E325 error,
+  # or KeyboardInterrupt after user selects one of the options.
+  except vim.error as e:
+    if 'E325' not in str( e ):
+      raise
+    # Do nothing if the target file is still not opened (user chose (Q)uit).
+    if filename != GetCurrentBufferFilepath():
+      return False
+  # Thrown when user chooses (A)bort in .swp message box.
+  except KeyboardInterrupt:
+    return False
+  return True
+
+
 # Both |line| and |column| need to be 1-based
-def JumpToLocation( filename, line, column ):
+def JumpToLocation( filename, line, column, modifiers ):
   # Add an entry to the jumplist
   vim.command( "normal! m'" )
 
@@ -487,27 +509,24 @@ def JumpToLocation( filename, line, column ):
     # jumplist.
     user_command = user_options_store.Value( 'goto_buffer_command' )
 
+    if user_command == 'split-or-existing-window':
+      if 'tab' in modifiers:
+        if TryJumpLocationInTabs( filename, line, column ):
+          return
+      elif TryJumpLocationInTab( vim.current.tabpage, filename, line, column ):
+        return
+      user_command = 'split'
+
+    # This command is kept for backward compatibility. :tab should be used with
+    # the 'split-or-existing-window' command instead.
     if user_command == 'new-or-existing-tab':
-      if TryJumpLocationInOpenedTab( filename, line, column ):
+      if TryJumpLocationInTabs( filename, line, column ):
         return
       user_command = 'new-tab'
 
-    vim_command = GetVimCommand( user_command )
-    try:
-      escaped_filename = EscapeFilepathForVimCommand( filename )
-      vim.command( 'keepjumps {0} {1}'.format( vim_command, escaped_filename ) )
-    # When the file we are trying to jump to has a swap file
-    # Vim opens swap-exists-choices dialog and throws vim.error with E325 error,
-    # or KeyboardInterrupt after user selects one of the options.
-    except vim.error as e:
-      if 'E325' not in str( e ):
-        raise
-      # Do nothing if the target file is still not opened (user chose (Q)uit)
-      if filename != GetCurrentBufferFilepath():
-        return
-    # Thrown when user chooses (A)bort in .swp message box
-    except KeyboardInterrupt:
+    if not JumpToFile( filename, user_command, modifiers ):
       return
+
   vim.current.window.cursor = ( line, column - 1 )
 
   # Center the screen on the jumped-to location
@@ -662,6 +681,15 @@ def EscapeForVim( text ):
 
 def CurrentFiletypes():
   return ToUnicode( vim.eval( "&filetype" ) ).split( '.' )
+
+
+def CurrentFiletypesEnabled( disabled_filetypes ):
+  """Return False if one of the current filetypes is disabled, True otherwise.
+  |disabled_filetypes| must be a dictionary where keys are the disabled
+  filetypes and values are unimportant. The special key '*' matches all
+  filetypes."""
+  return ( '*' not in disabled_filetypes and
+           not any( x in disabled_filetypes for x in CurrentFiletypes() ) )
 
 
 def GetBufferFiletypes( bufnr ):
@@ -924,7 +952,7 @@ def ReplaceChunk( start, end, replacement_text, vim_buffer ):
   replacement_lines[ 0 ] = start_existing_text + replacement_lines[ 0 ]
   replacement_lines[ -1 ] = replacement_lines[ -1 ] + end_existing_text
 
-  vim_buffer[ start_line : end_line + 1 ] = replacement_lines[:]
+  vim_buffer[ start_line : end_line + 1 ] = replacement_lines[ : ]
 
   return {
     'bufnr': vim_buffer.number,
@@ -960,7 +988,8 @@ def InsertNamespace( namespace ):
 def SearchInCurrentBuffer( pattern ):
   """ Returns the 1-indexed line on which the pattern matches
   (going UP from the current position) or 0 if not found """
-  return GetIntValue( "search('{0}', 'Wcnb')".format( EscapeForVim( pattern )))
+  return GetIntValue(
+    "search('{0}', 'Wcnb')".format( EscapeForVim( pattern ) ) )
 
 
 def LineTextInCurrentBuffer( line_number ):
@@ -1016,7 +1045,7 @@ def WriteToPreviewWindow( message ):
     vim.current.buffer.options[ 'modifiable' ] = True
     vim.current.buffer.options[ 'readonly' ]   = False
 
-    vim.current.buffer[:] = message.splitlines()
+    vim.current.buffer[ : ] = message.splitlines()
 
     vim.current.buffer.options[ 'buftype' ]    = 'nofile'
     vim.current.buffer.options[ 'bufhidden' ]  = 'wipe'
@@ -1163,3 +1192,39 @@ def BuildRange( start_line, end_line ):
       }
     }
   }
+
+
+@contextlib.contextmanager
+def AutocommandEventsIgnored( events = [ 'all' ] ):
+  """Context manager to perform operations without triggering autocommand
+  events. |events| is a list of events to ignore. By default, all events are
+  ignored."""
+  old_eventignore = vim.options[ 'eventignore' ]
+  ignored_events = {
+    event for event in ToUnicode( old_eventignore ).split( ',' ) if event }
+  ignored_events.update( events )
+  vim.options[ 'eventignore' ] = ','.join( ignored_events )
+  try:
+    yield
+  finally:
+    vim.options[ 'eventignore' ] = old_eventignore
+
+
+@contextlib.contextmanager
+def CurrentWindow():
+  """Context manager to perform operations on other windows than the current one
+  without triggering autocommands related to window movement. Use the
+  SwitchWindow function to move to other windows while under the context."""
+  current_window = vim.current.window
+  with AutocommandEventsIgnored( [ 'WinEnter', 'Winleave' ] ):
+    try:
+      yield
+    finally:
+      vim.current.window = current_window
+
+
+def SwitchWindow( window ):
+  """Move to the window object |window|. This function should be called under
+  the CurrentWindow context if you are going to switch back to the original
+  window."""
+  vim.current.window = window

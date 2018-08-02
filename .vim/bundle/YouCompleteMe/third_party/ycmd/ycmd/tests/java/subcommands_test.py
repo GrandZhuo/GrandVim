@@ -37,12 +37,11 @@ import requests
 from ycmd.utils import ReadFile
 from ycmd.completers.java.java_completer import NO_DOCUMENTATION_MESSAGE
 from ycmd.tests.java import ( DEFAULT_PROJECT_DIR,
-                              IsolatedYcmd,
                               PathToTestFile,
-                              SharedYcmd,
-                              StartJavaCompleterServerInDirectory )
+                              SharedYcmd )
 from ycmd.tests.test_utils import ( BuildRequest,
                                     ChunkMatcher,
+                                    CombineRequest,
                                     ErrorMatcher,
                                     LocationMatcher,
                                     WithRetry )
@@ -69,6 +68,8 @@ def Subcommands_DefinedSubcommands_test( app ):
                  'GetDoc',
                  'GetType',
                  'GoToReferences',
+                 'OpenProject',
+                 'OrganizeImports',
                  'RefactorRename',
                  'RestartServer' ] ),
        app.post_json( '/defined_subcommands', subcommands_data ).json )
@@ -111,6 +112,7 @@ def Subcommands_ServerNotReady_test():
   yield Test, 'GetDoc', []
   yield Test, 'FixIt', []
   yield Test, 'Format', []
+  yield Test, 'OrganizeImports', []
   yield Test, 'RefactorRename', [ 'test' ]
 
 
@@ -118,15 +120,9 @@ def RunTest( app, test, contents = None ):
   if not contents:
     contents = ReadFile( test[ 'request' ][ 'filepath' ] )
 
-  def CombineRequest( request, data ):
-    kw = request
-    request.update( data )
-    return BuildRequest( **kw )
-
   # Because we aren't testing this command, we *always* ignore errors. This
   # is mainly because we (may) want to test scenarios where the completer
-  # throws an exception and the easiest way to do that is to throw from
-  # within the FlagsForFile function.
+  # throws an exception.
   app.post_json( '/event_notification',
                  CombineRequest( test[ 'request' ], {
                                  'event_name': 'FileReadyToParse',
@@ -166,10 +162,8 @@ def RunTest( app, test, contents = None ):
 
 
 @WithRetry
-@IsolatedYcmd
+@SharedYcmd
 def Subcommands_GetDoc_NoDoc_test( app ):
-  StartJavaCompleterServerInDirectory( app,
-                                       PathToTestFile( DEFAULT_PROJECT_DIR ) )
   filepath = PathToTestFile( 'simple_eclipse_project',
                              'src',
                              'com',
@@ -248,10 +242,9 @@ def Subcommands_GetDoc_Class_test( app ):
   } )
 
 
-@IsolatedYcmd
+@WithRetry
+@SharedYcmd
 def Subcommands_GetType_NoKnownType_test( app ):
-  StartJavaCompleterServerInDirectory( app,
-                                       PathToTestFile( DEFAULT_PROJECT_DIR ) )
   filepath = PathToTestFile( 'simple_eclipse_project',
                              'src',
                              'com',
@@ -488,10 +481,9 @@ def Subcommands_GetType_LiteralValue_test( app ):
                ErrorMatcher( RuntimeError, 'Unknown type' ) )
 
 
-@IsolatedYcmd
+@WithRetry
+@SharedYcmd
 def Subcommands_GoTo_NoLocation_test( app ):
-  StartJavaCompleterServerInDirectory( app,
-                                       PathToTestFile( DEFAULT_PROJECT_DIR ) )
   filepath = PathToTestFile( 'simple_eclipse_project',
                              'src',
                              'com',
@@ -517,10 +509,9 @@ def Subcommands_GoTo_NoLocation_test( app ):
                ErrorMatcher( RuntimeError, 'Cannot jump to location' ) )
 
 
-@IsolatedYcmd
+@WithRetry
+@SharedYcmd
 def Subcommands_GoToReferences_NoReferences_test( app ):
-  StartJavaCompleterServerInDirectory( app,
-                                       PathToTestFile( DEFAULT_PROJECT_DIR ) )
   filepath = PathToTestFile( 'simple_eclipse_project',
                              'src',
                              'com',
@@ -809,7 +800,7 @@ def Subcommands_FixIt_SingleDiag_MultipleOption_Insertion_test():
       } ),
       has_entries( {
         'text': "Create field 'Wibble'",
-        'chunks': contains (
+        'chunks': contains(
           ChunkMatcher( '\n\n',
                         LocationMatcher( filepath, 16, 4 ),
                         LocationMatcher( filepath, 16, 4 ) ),
@@ -820,7 +811,7 @@ def Subcommands_FixIt_SingleDiag_MultipleOption_Insertion_test():
       } ),
       has_entries( {
         'text': "Create constant 'Wibble'",
-        'chunks': contains (
+        'chunks': contains(
           ChunkMatcher( '\n\n',
                         LocationMatcher( filepath, 16, 4 ),
                         LocationMatcher( filepath, 16, 4 ) ),
@@ -831,7 +822,7 @@ def Subcommands_FixIt_SingleDiag_MultipleOption_Insertion_test():
       } ),
       has_entries( {
         'text': "Create parameter 'Wibble'",
-        'chunks': contains (
+        'chunks': contains(
           ChunkMatcher( ', ',
                         LocationMatcher( filepath, 18, 32 ),
                         LocationMatcher( filepath, 18, 32 ) ),
@@ -842,7 +833,7 @@ def Subcommands_FixIt_SingleDiag_MultipleOption_Insertion_test():
       } ),
       has_entries( {
         'text': "Create local variable 'Wibble'",
-        'chunks': contains (
+        'chunks': contains(
           ChunkMatcher( 'Object Wibble;',
                         LocationMatcher( filepath, 19, 5 ),
                         LocationMatcher( filepath, 19, 5 ) ),
@@ -1122,7 +1113,7 @@ def Subcommands_Format_WholeFile_Spaces_test( app ):
                              'Test.java' )
   RunTest( app, {
     'description': 'Formatting is applied on the whole file '
-                   'with tabs composed of 4 spaces by default',
+                   'with tabs composed of 4 spaces',
     'request': {
       'command': 'Format',
       'filepath': filepath,
@@ -1304,7 +1295,7 @@ def Subcommands_Format_Range_Spaces_test( app ):
                              'Test.java' )
   RunTest( app, {
     'description': 'Formatting is applied on some part of the file '
-                   'with tabs composed of 4 spaces by default',
+                   'with tabs composed of 4 spaces',
     'request': {
       'command': 'Format',
       'filepath': filepath,
@@ -1500,6 +1491,42 @@ def Subcommands_GoTo_test():
 
 @WithRetry
 @SharedYcmd
+def Subcommands_OrganizeImports_test( app ):
+  filepath = PathToTestFile( 'simple_eclipse_project',
+                             'src',
+                             'com',
+                             'test',
+                             'TestLauncher.java' )
+  RunTest( app, {
+    'description': 'Imports are resolved and sorted, '
+                   'and unused ones are removed',
+    'request': {
+      'command': 'OrganizeImports',
+      'filepath': filepath
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': has_entries( {
+        'fixits': contains( has_entries( {
+          'chunks': contains(
+            ChunkMatcher( 'import com.youcompleteme.Test;',
+                          LocationMatcher( filepath, 3,  1 ),
+                          LocationMatcher( filepath, 3,  1 ) ),
+            ChunkMatcher( '\n',
+                          LocationMatcher( filepath, 3,  1 ),
+                          LocationMatcher( filepath, 3,  1 ) ),
+            ChunkMatcher( '',
+                          LocationMatcher( filepath, 3, 39 ),
+                          LocationMatcher( filepath, 4, 54 ) ),
+          )
+        } ) )
+      } )
+    }
+  } )
+
+
+@WithRetry
+@SharedYcmd
 @patch( 'ycmd.completers.language_server.language_server_completer.'
         'REQUEST_TIMEOUT_COMMAND',
         5 )
@@ -1545,8 +1572,8 @@ def Subcommands_RequestFailed_test( app ):
                          bytes( b'textDocument/codeFAILED' ) )
 
     with connection._stdin_lock:
-       connection._server_stdin.write( junk )
-       connection._server_stdin.flush()
+      connection._server_stdin.write( junk )
+      connection._server_stdin.flush()
 
 
   with patch.object( connection, 'WriteData', side_effect = WriteJunkToServer ):

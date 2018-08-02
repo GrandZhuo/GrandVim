@@ -22,7 +22,6 @@ from __future__ import absolute_import
 # Not installing aliases from python-future; it's unreliable and slow.
 from builtins import *  # noqa
 
-import contextlib
 import logging
 import json
 import vim
@@ -33,7 +32,7 @@ from ycmd.utils import ToBytes, urljoin, urlparse, GetCurrentDirectory
 from ycmd.hmac_utils import CreateRequestHmac, CreateHmac, SecureBytesEqual
 from ycmd.responses import ServerError, UnknownExtraConf
 
-_HEADERS = {'content-type': 'application/json'}
+_HEADERS = { 'content-type': 'application/json' }
 _CONNECT_TIMEOUT_SEC = 0.01
 # Setting this to None seems to screw up the Requests/urllib3 libs.
 _READ_TIMEOUT_SEC = 30
@@ -44,7 +43,7 @@ _logger = logging.getLogger( __name__ )
 class BaseRequest( object ):
 
   def __init__( self ):
-    pass
+    self._should_resend = False
 
 
   def Start( self ):
@@ -58,28 +57,79 @@ class BaseRequest( object ):
   def Response( self ):
     return {}
 
+
+  def ShouldResend( self ):
+    return self._should_resend
+
+
+  def HandleFuture( self,
+                    future,
+                    display_message = True,
+                    truncate_message = False ):
+    """Get the server response from a |future| object and catch any exception
+    while doing so. If an exception is raised because of a unknown
+    .ycm_extra_conf.py file, load the file or ignore it after asking the user.
+    An identical request should be sent again to the server. For other
+    exceptions, log the exception and display its message to the user on the Vim
+    status line. Unset the |display_message| parameter to hide the message from
+    the user. Set the |truncate_message| parameter to avoid hit-enter prompts
+    from this message."""
+    try:
+      try:
+        return _JsonFromFuture( future )
+      except UnknownExtraConf as e:
+        if vimsupport.Confirm( str( e ) ):
+          _LoadExtraConfFile( e.extra_conf_file )
+        else:
+          _IgnoreExtraConfFile( e.extra_conf_file )
+        self._should_resend = True
+    except BaseRequest.Requests().exceptions.ConnectionError:
+      # We don't display this exception to the user since it is likely to happen
+      # for each subsequent request (typically if the server crashed) and we
+      # don't want to spam the user with it.
+      _logger.exception( 'Unable to connect to server' )
+    except Exception as e:
+      _logger.exception( 'Error while handling server response' )
+      if display_message:
+        DisplayServerException( e, truncate_message )
+
+    return None
+
+
   # This method blocks
   # |timeout| is num seconds to tolerate no response from server before giving
   # up; see Requests docs for details (we just pass the param along).
-  @staticmethod
-  def GetDataFromHandler( handler, timeout = _READ_TIMEOUT_SEC ):
-    return JsonFromFuture( BaseRequest._TalkToHandlerAsync( '',
-                                                            handler,
-                                                            'GET',
-                                                            timeout ) )
+  # See the HandleFuture method for the |display_message| and |truncate_message|
+  # parameters.
+  def GetDataFromHandler( self,
+                          handler,
+                          timeout = _READ_TIMEOUT_SEC,
+                          display_message = True,
+                          truncate_message = False ):
+    return self.HandleFuture(
+        BaseRequest._TalkToHandlerAsync( '', handler, 'GET', timeout ),
+        display_message,
+        truncate_message )
 
 
   # This is the blocking version of the method. See below for async.
   # |timeout| is num seconds to tolerate no response from server before giving
   # up; see Requests docs for details (we just pass the param along).
-  @staticmethod
-  def PostDataToHandler( data, handler, timeout = _READ_TIMEOUT_SEC ):
-    return JsonFromFuture( BaseRequest.PostDataToHandlerAsync( data,
-                                                               handler,
-                                                               timeout ) )
+  # See the HandleFuture method for the |display_message| and |truncate_message|
+  # parameters.
+  def PostDataToHandler( self,
+                         data,
+                         handler,
+                         timeout = _READ_TIMEOUT_SEC,
+                         display_message = True,
+                         truncate_message = False ):
+    return self.HandleFuture(
+        BaseRequest.PostDataToHandlerAsync( data, handler, timeout ),
+        display_message,
+        truncate_message )
 
 
-  # This returns a future! Use JsonFromFuture to get the value.
+  # This returns a future! Use HandleFuture to get the value.
   # |timeout| is num seconds to tolerate no response from server before giving
   # up; see Requests docs for details (we just pass the param along).
   @staticmethod
@@ -87,7 +137,7 @@ class BaseRequest( object ):
     return BaseRequest._TalkToHandlerAsync( data, handler, 'POST', timeout )
 
 
-  # This returns a future! Use JsonFromFuture to get the value.
+  # This returns a future! Use HandleFuture to get the value.
   # |method| is either 'POST' or 'GET'.
   # |timeout| is num seconds to tolerate no response from server before giving
   # up; see Requests docs for details (we just pass the param along).
@@ -185,7 +235,7 @@ def BuildRequestData( buffer_number = None ):
   }
 
 
-def JsonFromFuture( future ):
+def _JsonFromFuture( future ):
   response = future.result()
   _ValidateResponseObject( response )
   if response.status_code == BaseRequest.Requests().codes.server_error:
@@ -200,61 +250,24 @@ def JsonFromFuture( future ):
   return None
 
 
-@contextlib.contextmanager
-def HandleServerException( display = True, truncate = False ):
-  """Catch any exception raised through server communication. If it is raised
-  because of a unknown .ycm_extra_conf.py file, load the file or ignore it after
-  asking the user. Otherwise, log the exception and display its message to the
-  user on the Vim status line. Unset the |display| parameter to hide the message
-  from the user. Set the |truncate| parameter to avoid hit-enter prompts from
-  this message.
-
-  The GetDataFromHandler, PostDataToHandler, and JsonFromFuture functions should
-  always be wrapped by this function to avoid Python exceptions bubbling up to
-  the user.
-
-  Example usage:
-
-   with HandleServerException():
-     response = BaseRequest.PostDataToHandler( ... )
-  """
-  try:
-    try:
-      yield
-    except UnknownExtraConf as e:
-      if vimsupport.Confirm( str( e ) ):
-        _LoadExtraConfFile( e.extra_conf_file )
-      else:
-        _IgnoreExtraConfFile( e.extra_conf_file )
-  except BaseRequest.Requests().exceptions.ConnectionError:
-    # We don't display this exception to the user since it is likely to happen
-    # for each subsequent request (typically if the server crashed) and we
-    # don't want to spam the user with it.
-    _logger.exception( 'Unable to connect to server' )
-  except Exception as e:
-    _logger.exception( 'Error while handling server response' )
-    if display:
-      DisplayServerException( e, truncate )
-
-
 def _LoadExtraConfFile( filepath ):
-  BaseRequest.PostDataToHandler( { 'filepath': filepath },
-                                 'load_extra_conf_file' )
+  BaseRequest().PostDataToHandler( { 'filepath': filepath },
+                                   'load_extra_conf_file' )
 
 
 def _IgnoreExtraConfFile( filepath ):
-  BaseRequest.PostDataToHandler( { 'filepath': filepath },
-                                 'ignore_extra_conf_file' )
+  BaseRequest().PostDataToHandler( { 'filepath': filepath },
+                                   'ignore_extra_conf_file' )
 
 
-def DisplayServerException( exception, truncate = False ):
+def DisplayServerException( exception, truncate_message = False ):
   serialized_exception = str( exception )
 
   # We ignore the exception about the file already being parsed since it comes
   # up often and isn't something that's actionable by the user.
   if 'already being parsed' in serialized_exception:
     return
-  vimsupport.PostVimMessage( serialized_exception, truncate = truncate )
+  vimsupport.PostVimMessage( serialized_exception, truncate = truncate_message )
 
 
 def _ToUtf8Json( data ):

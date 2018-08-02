@@ -1,5 +1,4 @@
-# Copyright (C) 2011-2012 Google Inc.
-#               2017      ycmd contributors
+# Copyright (C) 2011-2018 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -27,42 +26,37 @@ from collections import defaultdict
 from future.utils import iteritems
 import logging
 import os.path
-import re
 import textwrap
 import xml.etree.ElementTree
 from xml.etree.ElementTree import ParseError as XmlParseError
 
 import ycm_core
 from ycmd import responses
-from ycmd.utils import ToCppStringCompatible, ToUnicode
+from ycmd.utils import re, ToBytes, ToCppStringCompatible, ToUnicode
 from ycmd.completers.completer import Completer
 from ycmd.completers.cpp.flags import ( Flags, PrepareFlagsForClang,
-                                        NoCompilationDatabase,
                                         UserIncludePaths )
 from ycmd.completers.cpp.ephemeral_values_set import EphemeralValuesSet
-from ycmd.completers.general.filename_completer import (
-    GenerateCandidatesForPaths )
+from ycmd.completers.cpp.include_cache import IncludeCache, IncludeList
 from ycmd.responses import NoExtraConfDetected, UnknownExtraConf
 
-CLANG_FILETYPES = set( [ 'c', 'cpp', 'objc', 'objcpp' ] )
+CLANG_FILETYPES = { 'c', 'cpp', 'cuda', 'objc', 'objcpp' }
 PARSING_FILE_MESSAGE = 'Still parsing file, no completions yet.'
 NO_COMPILE_FLAGS_MESSAGE = 'Still no compile flags, no completions yet.'
-INVALID_FILE_MESSAGE = 'File is invalid.'
 NO_COMPLETIONS_MESSAGE = 'No completions found; errors in the file?'
 NO_DIAGNOSTIC_MESSAGE = 'No diagnostic for current line!'
 PRAGMA_DIAG_TEXT_TO_IGNORE = '#pragma once in main file'
 TOO_MANY_ERRORS_DIAG_TEXT_TO_IGNORE = 'too many errors emitted, stopping now'
 NO_DOCUMENTATION_MESSAGE = 'No documentation available for current context'
-INCLUDE_REGEX = re.compile( '(\s*#\s*(?:include|import)\s*)(:?"[^"]*|<[^>]*)' )
+INCLUDE_REGEX = re.compile( '(\s*#\s*(?:include|import)\s*)(?:"[^"]*|<[^>]*)' )
 
 
 class ClangCompleter( Completer ):
   def __init__( self, user_options ):
     super( ClangCompleter, self ).__init__( user_options )
-    self._max_diagnostics_to_display = user_options[
-      'max_diagnostics_to_display' ]
     self._completer = ycm_core.ClangCompleter()
     self._flags = Flags()
+    self._include_cache = IncludeCache()
     self._diagnostic_store = None
     self._files_being_compiled = EphemeralValuesSet()
     self._logger = logging.getLogger( __name__ )
@@ -121,20 +115,12 @@ class ClangCompleter( Completer ):
     if quoted_include:
       include_paths.extend( quoted_include_paths )
 
-    paths = []
+    includes = IncludeList()
     for include_path in include_paths:
       unicode_path = ToUnicode( os.path.join( include_path, path_dir ) )
-      try:
-        # We need to pass a unicode string to get unicode strings out of
-        # listdir.
-        relative_paths = os.listdir( unicode_path )
-      except Exception:
-        self._logger.exception( 'Error while listing %s folder.', unicode_path )
-        relative_paths = []
+      includes.AddIncludes( self._include_cache.GetIncludes( unicode_path ) )
 
-      paths.extend( os.path.join( include_path, path_dir, relative_path ) for
-                    relative_path in relative_paths  )
-    return paths
+    return includes.GetIncludes()
 
 
   def ComputeCandidatesInner( self, request_data ):
@@ -142,9 +128,9 @@ class ClangCompleter( Completer ):
     if not flags:
       raise RuntimeError( NO_COMPILE_FLAGS_MESSAGE )
 
-    paths = self.GetIncludePaths( request_data )
-    if paths is not None:
-      return GenerateCandidatesForPaths( paths )
+    includes = self.GetIncludePaths( request_data )
+    if includes is not None:
+      return includes
 
     if self._completer.UpdatingTranslationUnit(
         ToCppStringCompatible( filename ) ):
@@ -243,9 +229,8 @@ class ClangCompleter( Completer ):
     if include_response:
       return include_response
 
-    location = self._LocationForGoTo( 'GetDefinitionLocation', request_data )
-    if not location or not location.IsValid():
-      location = self._LocationForGoTo( 'GetDeclarationLocation', request_data )
+    location = self._LocationForGoTo( 'GetDefinitionOrDeclarationLocation',
+                                      request_data )
     if not location or not location.IsValid():
       raise RuntimeError( 'Can\'t jump to definition or declaration.' )
     return _ResponseForLocation( location )
@@ -256,13 +241,9 @@ class ClangCompleter( Completer ):
     if include_response:
       return include_response
 
-    location = self._LocationForGoTo( 'GetDefinitionLocation',
+    location = self._LocationForGoTo( 'GetDefinitionOrDeclarationLocation',
                                       request_data,
                                       reparse = False )
-    if not location or not location.IsValid():
-      location = self._LocationForGoTo( 'GetDeclarationLocation',
-                                        request_data,
-                                        reparse = False )
     if not location or not location.IsValid():
       raise RuntimeError( 'Can\'t jump to definition or declaration.' )
     return _ResponseForLocation( location )
@@ -325,15 +306,17 @@ class ClangCompleter( Completer ):
         column,
         files,
         flags,
-        reparse)
+        reparse )
 
     if not message:
       message = "No semantic information available"
 
     return response_builder( message )
 
+
   def _ClearCompilationFlagCache( self ):
     self._flags.Clear()
+
 
   def _FixIt( self, request_data ):
     flags, filename = self._FlagsForRequest( request_data )
@@ -358,6 +341,7 @@ class ClangCompleter( Completer ):
 
     return responses.BuildFixItResponse( fixits )
 
+
   def OnFileReadyToParse( self, request_data ):
     flags, filename = self._FlagsForRequest( request_data )
     if not flags:
@@ -371,8 +355,9 @@ class ClangCompleter( Completer ):
 
     diagnostics = _FilterDiagnostics( diagnostics )
     self._diagnostic_store = DiagnosticsToDiagStructure( diagnostics )
-    return [ responses.BuildDiagnosticData( x ) for x in
-             diagnostics[ : self._max_diagnostics_to_display ] ]
+    return responses.BuildDiagnosticResponse( diagnostics,
+                                              request_data[ 'filepath' ],
+                                              self.max_diagnostics_to_display )
 
 
   def OnBufferUnload( self, request_data ):
@@ -429,11 +414,8 @@ class ClangCompleter( Completer ):
       flags = []
       filename = request_data[ 'filepath' ]
 
-    try:
-      database_directory = self._flags.FindCompilationDatabase(
-          os.path.dirname( filename ) ).database_directory
-    except NoCompilationDatabase:
-      database_directory = None
+    database = self._flags.FindCompilationDatabase( filename )
+    database_directory = database.database_directory if database else None
 
     database_item = responses.DebugInfoItem(
       key = 'compilation database path',
@@ -441,7 +423,7 @@ class ClangCompleter( Completer ):
     flags_item = responses.DebugInfoItem(
       key = 'flags', value = '{0}'.format( list( flags ) ) )
     filename_item = responses.DebugInfoItem(
-      key = 'translation_unit', value = filename )
+      key = 'translation unit', value = filename )
 
     return responses.BuildDebugInfoResponse( name = 'C-family',
                                              items = [ database_item,
@@ -451,8 +433,6 @@ class ClangCompleter( Completer ):
 
   def _FlagsForRequest( self, request_data ):
     filename = request_data[ 'filepath' ]
-    if not filename:
-      raise INVALID_FILE_MESSAGE
 
     if 'compilation_flags' in request_data:
       # Not supporting specifying the translation unit using this method as it
@@ -461,7 +441,7 @@ class ClangCompleter( Completer ):
                                      filename ),
                filename )
 
-    client_data = request_data.get( 'extra_conf_data', None )
+    client_data = request_data[ 'extra_conf_data' ]
     return self._flags.FlagsForFile( filename, client_data = client_data )
 
 
@@ -485,7 +465,7 @@ def DiagnosticsToDiagStructure( diagnostics ):
 
 
 def ClangAvailableForFiletypes( filetypes ):
-  return any( [ filetype in CLANG_FILETYPES for filetype in filetypes ] )
+  return any( filetype in CLANG_FILETYPES for filetype in filetypes )
 
 
 def _FilterDiagnostics( diagnostics ):
@@ -555,7 +535,11 @@ def _BuildGetDocResponse( doc_data ):
   # useful pieces of documentation available to the developer. Perhaps in
   # future, we can use this XML for more interesting things.
   try:
-    root = xml.etree.ElementTree.fromstring( doc_data.comment_xml )
+    # Only python2 actually requires bytes here.
+    # Doing the same on python3 makes the code simpler,
+    # but introduces unnecessary, though quite acceptable overhead
+    # (compared to XML processing).
+    root = xml.etree.ElementTree.fromstring( ToBytes( doc_data.comment_xml ) )
   except XmlParseError:
     raise ValueError( NO_DOCUMENTATION_MESSAGE )
 

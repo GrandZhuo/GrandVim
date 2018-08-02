@@ -7,28 +7,28 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
-from distutils import sysconfig
 from shutil import rmtree
 from tempfile import mkdtemp
 import errno
+import hashlib
 import multiprocessing
 import os
 import os.path as p
 import platform
 import re
 import shlex
+import shutil
 import subprocess
 import sys
+import sysconfig
 import tarfile
-import shutil
-import hashlib
 import tempfile
 
-PY_MAJOR, PY_MINOR = sys.version_info[ 0 : 2 ]
-if not ( ( PY_MAJOR == 2 and PY_MINOR == 7 ) or
+PY_MAJOR, PY_MINOR, PY_PATCH = sys.version_info[ 0 : 3 ]
+if not ( ( PY_MAJOR == 2 and PY_MINOR == 7 and PY_PATCH >= 1 ) or
          ( PY_MAJOR == 3 and PY_MINOR >= 4 ) or
          PY_MAJOR > 3 ):
-  sys.exit( 'ycmd requires Python 2.7 or >= 3.4; '
+  sys.exit( 'ycmd requires Python >= 2.7.1 or >= 3.4; '
             'your version of Python is ' + sys.version )
 
 DIR_OF_THIS_SCRIPT = p.dirname( p.abspath( __file__ ) )
@@ -79,11 +79,20 @@ DYNAMIC_PYTHON_LIBRARY_REGEX = """
   )$
 """
 
-JDTLS_MILESTONE = '0.14.0'
-JDTLS_BUILD_STAMP = '201802282111'
+JDTLS_MILESTONE = '0.18.0'
+JDTLS_BUILD_STAMP = '201805010001'
 JDTLS_SHA256 = (
-  'ce27fa4af601d11c3914253d51218667003b51468672d0ae369039ec8a111a3b'
+  '9253d4222519442b65b4a01516c9496354b59813d906357a5f3f265601cc77db'
 )
+
+BUILD_ERROR_MESSAGE = (
+  'ERROR: the build failed.\n\n'
+  'NOTE: it is *highly* unlikely that this is a bug but rather\n'
+  'that this is a problem with the configuration of your system\n'
+  'or a missing dependency. Please carefully read CONTRIBUTING.md\n'
+  'and if you\'re sure that it is a bug, please raise an issue on the\n'
+  'issue tracker, including the entire output of this script\n'
+  'and the invocation line used to run it.' )
 
 
 def OnMac():
@@ -155,10 +164,8 @@ def NumCores():
 
 
 def CheckCall( args, **kwargs ):
-  quiet = kwargs.get( 'quiet', False )
-  kwargs.pop( 'quiet', None )
-  status_message = kwargs.get( 'status_message', None )
-  kwargs.pop( 'status_message', None )
+  quiet = kwargs.pop( 'quiet', False )
+  status_message = kwargs.pop( 'status_message', None )
 
   if quiet:
     _CheckCallQuiet( args, status_message, **kwargs )
@@ -168,9 +175,9 @@ def CheckCall( args, **kwargs ):
 
 def _CheckCallQuiet( args, status_message, **kwargs ):
   if not status_message:
-    status_message = 'Running {0}'.format( args[ 0 ] )
+    status_message = 'Running {}'.format( args[ 0 ] )
 
-  # __future_ not appear to support flush= on print_function
+  # __future__ not appear to support flush= on print_function
   sys.stdout.write( status_message + '...' )
   sys.stdout.flush()
 
@@ -181,8 +188,7 @@ def _CheckCallQuiet( args, status_message, **kwargs ):
 
 
 def _CheckCall( args, **kwargs ):
-  exit_message = kwargs.get( 'exit_message', None )
-  kwargs.pop( 'exit_message', None )
+  exit_message = kwargs.pop( 'exit_message', None )
   stdout = kwargs.get( 'stdout', None )
 
   try:
@@ -225,7 +231,7 @@ def GetPossiblePythonLibraryDirectories():
 
 
 def FindPythonLibraries():
-  include_dir = sysconfig.get_python_inc()
+  include_dir = sysconfig.get_config_var( 'INCLUDEPY' )
   library_dirs = GetPossiblePythonLibraryDirectories()
 
   # Since ycmd is compiled as a dynamic library, we can't link it to a Python
@@ -296,12 +302,12 @@ def CustomPythonCmakeArgs( args ):
 
 
 def GetGenerator( args ):
+  if args.ninja:
+    return 'Ninja'
   if OnWindows():
     return 'Visual Studio {version}{arch}'.format(
         version = args.msvc,
         arch = ' Win64' if platform.architecture()[ 0 ] == '64bit' else '' )
-  if PathToFirstExistingExecutable( ['ninja'] ):
-    return 'Ninja'
   return 'Unix Makefiles'
 
 
@@ -315,8 +321,6 @@ def ParseArguments():
                        help = 'Enable Go semantic completion engine.' )
   parser.add_argument( '--rust-completer', action = 'store_true',
                        help = 'Enable Rust semantic completion engine.' )
-  parser.add_argument( '--js-completer', action = 'store_true',
-                       help = 'Enable JavaScript semantic completion engine.' ),
   parser.add_argument( '--java-completer', action = 'store_true',
                        help = 'Enable Java semantic completion engine.' ),
   parser.add_argument( '--system-boost', action = 'store_true',
@@ -325,9 +329,11 @@ def ParseArguments():
   parser.add_argument( '--system-libclang', action = 'store_true',
                        help = 'Use system libclang instead of downloading one '
                        'from llvm.org. NOT RECOMMENDED OR SUPPORTED!' )
-  parser.add_argument( '--msvc', type = int, choices = [ 12, 14, 15 ],
+  parser.add_argument( '--msvc', type = int, choices = [ 14, 15 ],
                        default = 15, help = 'Choose the Microsoft Visual '
                        'Studio version (default: %(default)s).' )
+  parser.add_argument( '--ninja', action = 'store_true',
+                       help = 'Use Ninja build system.' )
   parser.add_argument( '--all',
                        action = 'store_true',
                        help   = 'Enable all supported completers',
@@ -352,6 +358,12 @@ def ParseArguments():
   parser.add_argument( '--skip-build',
                        action = 'store_true',
                        help = "Don't build ycm_core lib, just install deps" )
+  parser.add_argument( '--no-regex',
+                       action = 'store_true',
+                       help = "Don't build the regex module" )
+  parser.add_argument( '--clang-tidy',
+                       action = 'store_true',
+                       help = "Run clang-tidy static analysis" )
 
 
   # These options are deprecated.
@@ -362,13 +374,19 @@ def ParseArguments():
   parser.add_argument( '--racer-completer', action = 'store_true',
                        help = argparse.SUPPRESS )
   parser.add_argument( '--tern-completer', action = 'store_true',
-                       help = argparse.SUPPRESS ),
+                       help = argparse.SUPPRESS )
+  parser.add_argument( '--js-completer', action = 'store_true',
+                       help = argparse.SUPPRESS )
 
   args = parser.parse_args()
 
-  if args.enable_coverage:
+  # coverage is not supported for c++ on MSVC
+  if not OnWindows() and args.enable_coverage:
     # We always want a debug build when running with coverage enabled
     args.enable_debug = True
+
+  if not args.clang_tidy and os.environ.get( 'YCM_CLANG_TIDY' ):
+    args.clang_tidy = True
 
   if ( args.system_libclang and
        not args.clang_completer and
@@ -378,10 +396,23 @@ def ParseArguments():
   return args
 
 
+def FindCmake():
+  return FindExecutableOrDie( 'cmake', 'CMake is required to build ycmd' )
+
+
+def GetCmakeCommonArgs( args ):
+  cmake_args = [ '-G', GetGenerator( args ) ]
+  cmake_args.extend( CustomPythonCmakeArgs( args ) )
+  return cmake_args
+
+
 def GetCmakeArgs( parsed_args ):
   cmake_args = []
   if parsed_args.clang_completer or parsed_args.all_completers:
     cmake_args.append( '-DUSE_CLANG_COMPLETER=ON' )
+
+  if parsed_args.clang_tidy:
+    cmake_args.append( '-DUSE_CLANG_TIDY=ON' )
 
   if parsed_args.system_libclang:
     cmake_args.append( '-DUSE_SYSTEM_LIBCLANG=ON' )
@@ -462,36 +493,32 @@ def ExitIfYcmdLibInUseOnWindows():
                 'Stop all ycmd instances before compilation.' )
 
 
-def BuildYcmdLib( args ):
-  cmake = FindExecutableOrDie( 'cmake', 'cmake is required to build ycmd' )
+def GetCMakeBuildConfiguration( args ):
+  if OnWindows():
+    if args.enable_debug:
+      return [ '--config', 'Debug' ]
+    return [ '--config', 'Release' ]
+  return [ '--', '-j', str( NumCores() ) ]
 
-  if args.build_dir:
-    build_dir = os.path.abspath( args.build_dir )
+
+def BuildYcmdLib( cmake, cmake_common_args, script_args ):
+  if script_args.build_dir:
+    build_dir = os.path.abspath( script_args.build_dir )
     if not os.path.exists( build_dir ):
       os.makedirs( build_dir )
   else:
     build_dir = mkdtemp( prefix = 'ycm_build_' )
 
   try:
-    full_cmake_args = [ '-G', GetGenerator( args ) ]
-    full_cmake_args.extend( CustomPythonCmakeArgs( args ) )
-    full_cmake_args.extend( GetCmakeArgs( args ) )
-    full_cmake_args.append( p.join( DIR_OF_THIS_SCRIPT, 'cpp' ) )
-
     os.chdir( build_dir )
 
-    exit_message = (
-      'ERROR: the build failed.\n\n'
-      'NOTE: it is *highly* unlikely that this is a bug but rather\n'
-      'that this is a problem with the configuration of your system\n'
-      'or a missing dependency. Please carefully read CONTRIBUTING.md\n'
-      'and if you\'re sure that it is a bug, please raise an issue on the\n'
-      'issue tracker, including the entire output of this script\n'
-      'and the invocation line used to run it.' )
+    configure_command = ( [ cmake ] + cmake_common_args +
+                          GetCmakeArgs( script_args ) )
+    configure_command.append( p.join( DIR_OF_THIS_SCRIPT, 'cpp' ) )
 
-    CheckCall( [ cmake ] + full_cmake_args,
-               exit_message = exit_message,
-               quiet = args.quiet,
+    CheckCall( configure_command,
+               exit_message = BUILD_ERROR_MESSAGE,
+               quiet = script_args.quiet,
                status_message = 'Generating ycmd build configuration' )
 
     build_targets = [ 'ycm_core' ]
@@ -500,32 +527,56 @@ def BuildYcmdLib( args ):
     if 'YCM_BENCHMARK' in os.environ:
       build_targets.append( 'ycm_core_benchmarks' )
 
-    if OnWindows():
-      config = 'Debug' if args.enable_debug else 'Release'
-      build_config = [ '--config', config ]
-    else:
-      build_config = [ '--', '-j', str( NumCores() ) ]
+    build_config = GetCMakeBuildConfiguration( script_args )
 
     for target in build_targets:
-      build_command = ( [ 'cmake', '--build', '.', '--target', target ] +
+      build_command = ( [ cmake, '--build', '.', '--target', target ] +
                         build_config )
       CheckCall( build_command,
-                 exit_message = exit_message,
-                 quiet = args.quiet,
+                 exit_message = BUILD_ERROR_MESSAGE,
+                 quiet = script_args.quiet,
                  status_message = 'Compiling ycmd target: {0}'.format(
                    target ) )
 
     if 'YCM_TESTRUN' in os.environ:
-      RunYcmdTests( args, build_dir )
+      RunYcmdTests( script_args, build_dir )
     if 'YCM_BENCHMARK' in os.environ:
       RunYcmdBenchmarks( build_dir )
   finally:
     os.chdir( DIR_OF_THIS_SCRIPT )
 
-    if args.build_dir:
+    if script_args.build_dir:
       print( 'The build files are in: ' + build_dir )
     else:
       rmtree( build_dir, ignore_errors = OnCiService() )
+
+
+def BuildRegexModule( cmake, cmake_common_args, script_args ):
+  build_dir = mkdtemp( prefix = 'regex_build_' )
+
+  try:
+    os.chdir( build_dir )
+
+    configure_command = [ cmake ] + cmake_common_args
+    configure_command.append( p.join( DIR_OF_THIS_SCRIPT,
+                                      'third_party', 'cregex' ) )
+
+    CheckCall( configure_command,
+               exit_message = BUILD_ERROR_MESSAGE,
+               quiet = script_args.quiet,
+               status_message = 'Generating regex build configuration' )
+
+    build_config = GetCMakeBuildConfiguration( script_args )
+
+    build_command = ( [ cmake, '--build', '.', '--target', '_regex' ] +
+                      build_config )
+    CheckCall( build_command,
+               exit_message = BUILD_ERROR_MESSAGE,
+               quiet = script_args.quiet,
+               status_message = 'Compiling regex module' )
+  finally:
+    os.chdir( DIR_OF_THIS_SCRIPT )
+    rmtree( build_dir, ignore_errors = OnCiService() )
 
 
 def EnableCsCompleter( args ):
@@ -627,7 +678,6 @@ def EnableJavaCompleter( switches ):
       jdtls_build_stamp = JDTLS_BUILD_STAMP )
   url = JDTLS_SERVER_URL_FORMAT.format(
       jdtls_milestone = JDTLS_MILESTONE,
-      jdtls_build_stamp = JDTLS_BUILD_STAMP,
       jdtls_package_name = package_name )
   file_name = p.join( CACHE, package_name )
 
@@ -673,10 +723,14 @@ def WritePythonUsedDuringBuild():
 
 def Main():
   args = ParseArguments()
+  cmake = FindCmake()
+  cmake_common_args = GetCmakeCommonArgs( args )
   if not args.skip_build:
     ExitIfYcmdLibInUseOnWindows()
-    BuildYcmdLib( args )
+    BuildYcmdLib( cmake, cmake_common_args, args )
     WritePythonUsedDuringBuild()
+  if not args.no_regex:
+    BuildRegexModule( cmake, cmake_common_args, args )
   if args.cs_completer or args.omnisharp_completer or args.all_completers:
     EnableCsCompleter( args )
   if args.go_completer or args.gocode_completer or args.all_completers:

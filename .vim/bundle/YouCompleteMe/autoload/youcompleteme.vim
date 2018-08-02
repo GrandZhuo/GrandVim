@@ -98,15 +98,7 @@ function! s:ReceiveMessages( timer_id )
 endfunction
 
 
-function! youcompleteme#Enable()
-  call s:SetUpBackwardsCompatibility()
-
-  " This can be 0 if YCM libs are old or -1 if an exception occured while
-  " executing the function.
-  if s:SetUpPython() != 1
-    return
-  endif
-
+function! s:SetUpOptions()
   call s:SetUpCommands()
   call s:SetUpCpoptions()
   call s:SetUpCompleteopt()
@@ -118,6 +110,17 @@ function! youcompleteme#Enable()
 
   call s:SetUpSigns()
   call s:SetUpSyntaxHighlighting()
+endfunction
+
+
+function! youcompleteme#Enable()
+  call s:SetUpBackwardsCompatibility()
+
+  if !s:SetUpPython()
+    return
+  endif
+
+  call s:SetUpOptions()
 
   call youcompleteme#EnableCursorMovedAutocommands()
   augroup youcompleteme
@@ -191,17 +194,20 @@ import vim
 # Add python sources folder to the system path.
 script_folder = vim.eval( 's:script_folder_path' )
 sys.path.insert( 0, os.path.join( script_folder, '..', 'python' ) )
-
-from ycm.setup import SetUpSystemPaths, SetUpYCM
+sys.path.insert( 0, os.path.join( script_folder, '..', 'third_party', 'ycmd' ) )
 
 # We enclose this code in a try/except block to avoid backtraces in Vim.
 try:
-  SetUpSystemPaths()
+  from ycmd import server_utils as su
+  su.AddNearestThirdPartyFoldersToSysPath( script_folder )
+  # We need to import ycmd's third_party folders as well since we import and
+  # use ycmd code in the client.
+  su.AddNearestThirdPartyFoldersToSysPath( su.__file__ )
 
   # Import the modules used in this file.
-  from ycm import base, vimsupport
+  from ycm import base, vimsupport, youcompleteme
 
-  ycm_state = SetUpYCM()
+  ycm_state = youcompleteme.YouCompleteMe()
 except Exception as error:
   # We don't use PostVimMessage or EchoText from the vimsupport module because
   # importing this module may fail.
@@ -363,6 +369,7 @@ function! s:TurnOffSyntasticForCFamily()
   let g:syntastic_c_checkers = []
   let g:syntastic_objc_checkers = []
   let g:syntastic_objcpp_checkers = []
+  let g:syntastic_cuda_checkers = []
 endfunction
 
 
@@ -565,6 +572,9 @@ function! s:PollFileParseResponse( ... )
   endif
 
   exec s:python_command "ycm_state.HandleFileParseRequest()"
+  if s:Pyeval( "ycm_state.ShouldResendFileParseRequest()" )
+    call s:OnFileReadyToParse( 1 )
+  endif
 endfunction
 
 
@@ -588,12 +598,20 @@ endfunction
 
 
 function! s:OnInsertChar()
+  if !s:AllowedToCompleteInCurrentBuffer()
+    return
+  endif
+
   call timer_stop( s:pollers.completion.id )
   call s:CloseCompletionMenu()
 endfunction
 
 
 function! s:OnDeleteChar( key )
+  if !s:AllowedToCompleteInCurrentBuffer()
+    return a:key
+  endif
+
   call timer_stop( s:pollers.completion.id )
   if pumvisible()
     return "\<C-y>" . a:key
@@ -827,7 +845,8 @@ function! s:SetUpCommands()
   command! -nargs=* -complete=custom,youcompleteme#LogsComplete
         \ YcmToggleLogs call s:ToggleLogs(<f-args>)
   command! -nargs=* -complete=custom,youcompleteme#SubCommandsComplete -range
-        \ YcmCompleter call s:CompleterCommand(<count>,
+        \ YcmCompleter call s:CompleterCommand(<q-mods>,
+        \                                      <count>,
         \                                      <line1>,
         \                                      <line2>,
         \                                      <f-args>)
@@ -838,6 +857,8 @@ endfunction
 
 
 function! s:RestartServer()
+  call s:SetUpOptions()
+
   exec s:python_command "ycm_state.RestartServer()"
 
   call timer_stop( s:pollers.receive_messages.id )
@@ -869,7 +890,7 @@ function! youcompleteme#LogsComplete( arglead, cmdline, cursorpos )
 endfunction
 
 
-function! s:CompleterCommand( count, line1, line2, ... )
+function! s:CompleterCommand( mods, count, line1, line2, ... )
   " CompleterCommand will call the OnUserCommand function of a completer. If
   " the first arguments is of the form "ft=..." it can be used to specify the
   " completer to use (for example "ft=cpp"). Else the native filetype completer
@@ -890,6 +911,7 @@ function! s:CompleterCommand( count, line1, line2, ... )
   exec s:python_command "ycm_state.SendCommandRequest(" .
         \ "vim.eval( 'l:arguments' )," .
         \ "vim.eval( 'l:completer' )," .
+        \ "vim.eval( 'a:mods' )," .
         \ "vimsupport.GetBoolValue( 'a:count != -1' )," .
         \ "vimsupport.GetIntValue( 'a:line1' )," .
         \ "vimsupport.GetIntValue( 'a:line2' ) )"

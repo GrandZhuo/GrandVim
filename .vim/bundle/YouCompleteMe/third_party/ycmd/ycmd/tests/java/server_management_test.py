@@ -1,4 +1,4 @@
-# Copyright (C) 2017 ycmd contributors
+# Copyright (C) 2017-2018 ycmd contributors
 # encoding: utf-8
 #
 # This file is part of ycmd.
@@ -26,19 +26,23 @@ from builtins import *  # noqa
 import functools
 import os
 import psutil
+import requests
 import time
-import threading
 
 from mock import patch
 from hamcrest import ( assert_that,
                        contains,
+                       equal_to,
                        has_entries,
                        has_entry,
                        has_item )
 from ycmd.tests.java import ( PathToTestFile,
                               IsolatedYcmd,
+                              SharedYcmd,
                               StartJavaCompleterServerInDirectory )
 from ycmd.tests.test_utils import ( BuildRequest,
+                                    ErrorMatcher,
+                                    MockProcessTerminationTimingOut,
                                     TemporaryTestDir,
                                     WaitUntilCompleterServerReady )
 from ycmd import utils, handlers
@@ -162,6 +166,28 @@ def ServerManagement_ProjectDetection_MavenParent_test( app ):
                _ProjectDirectoryMatcher( project ) )
 
 
+@TidyJDTProjectFiles( PathToTestFile( 'simple_maven_project',
+                                      'simple_submodule' ) )
+@TidyJDTProjectFiles( PathToTestFile( 'simple_maven_project' ) )
+@IsolatedYcmd
+def ServerManagement_ProjectDetection_MavenParent_Submodule_test( app ):
+  StartJavaCompleterServerInDirectory( app,
+                                       PathToTestFile( 'simple_maven_project',
+                                                       'simple_submodule',
+                                                       'src',
+                                                       'main',
+                                                       'java',
+                                                       'com',
+                                                       'test' ) )
+
+  project = PathToTestFile( 'simple_maven_project' )
+
+  # Run the debug info to check that we have the correct project dir
+  request_data = BuildRequest( filetype = 'java' )
+  assert_that( app.post_json( '/debug_info', request_data ).json,
+               _ProjectDirectoryMatcher( project ) )
+
+
 @TidyJDTProjectFiles( PathToTestFile( 'simple_gradle_project' ) )
 @IsolatedYcmd
 def ServerManagement_ProjectDetection_GradleParent_test( app ):
@@ -181,6 +207,126 @@ def ServerManagement_ProjectDetection_GradleParent_test( app ):
                _ProjectDirectoryMatcher( project ) )
 
 
+@TidyJDTProjectFiles( PathToTestFile( 'simple_gradle_project' ) )
+@TidyJDTProjectFiles( PathToTestFile( 'simple_maven_project' ) )
+@IsolatedYcmd
+def ServerManagement_OpenProject_AbsolutePath_test( app ):
+  StartJavaCompleterServerInDirectory( app,
+                                       PathToTestFile( 'simple_gradle_project',
+                                                       'src',
+                                                       'main',
+                                                       'java',
+                                                       'com',
+                                                       'test' ) )
+
+  # Initially, we detect the gradle project...
+  gradle_project = PathToTestFile( 'simple_gradle_project' )
+  maven_project = PathToTestFile( 'simple_maven_project' )
+
+  # Run the debug info to check that we have the correct project dir
+  request_data = BuildRequest( filetype = 'java' )
+  assert_that( app.post_json( '/debug_info', request_data ).json,
+               _ProjectDirectoryMatcher( gradle_project ) )
+
+
+  # We then force it to reload the maven project
+  app.post_json(
+    '/run_completer_command',
+    BuildRequest(
+      filetype = 'java',
+      command_arguments = [ 'OpenProject', maven_project ],
+    ),
+  )
+
+  # Run the debug info to check that we now have the maven project, without
+  # changing anything else
+  request_data = BuildRequest( filetype = 'java' )
+  assert_that( app.post_json( '/debug_info', request_data ).json,
+               _ProjectDirectoryMatcher( maven_project ) )
+
+
+@TidyJDTProjectFiles( PathToTestFile( 'simple_gradle_project' ) )
+@TidyJDTProjectFiles( PathToTestFile( 'simple_maven_project' ) )
+@IsolatedYcmd
+def ServerManagement_OpenProject_RelativePath_test( app ):
+  StartJavaCompleterServerInDirectory( app,
+                                       PathToTestFile( 'simple_gradle_project',
+                                                       'src',
+                                                       'main',
+                                                       'java',
+                                                       'com',
+                                                       'test' ) )
+
+  # Initially, we detect the gradle project...
+  gradle_project = PathToTestFile( 'simple_gradle_project' )
+  maven_project = PathToTestFile( 'simple_maven_project' )
+
+  # Run the debug info to check that we have the correct project dir
+  request_data = BuildRequest( filetype = 'java' )
+  assert_that( app.post_json( '/debug_info', request_data ).json,
+               _ProjectDirectoryMatcher( gradle_project ) )
+
+
+  # We then force it to reload the maven project
+  app.post_json(
+    '/run_completer_command',
+    BuildRequest(
+      filetype = 'java',
+      command_arguments = [
+        'OpenProject',
+        os.path.join( '..', 'simple_maven_project' ),
+      ],
+      working_dir = gradle_project,
+    ),
+  )
+
+  # Run the debug info to check that we now have the maven project, without
+  # changing anything else
+  request_data = BuildRequest( filetype = 'java' )
+  assert_that( app.post_json( '/debug_info', request_data ).json,
+               _ProjectDirectoryMatcher( maven_project ) )
+
+
+
+@SharedYcmd
+def ServerManagement_OpenProject_RelativePathNoWD_test( app ):
+  response = app.post_json(
+    '/run_completer_command',
+    BuildRequest(
+      filetype = 'java',
+      command_arguments = [
+        'OpenProject',
+        os.path.join( '..', 'simple_maven_project' ),
+      ],
+    ),
+    expect_errors = True,
+  )
+  assert_that( response.status_code,
+               equal_to( requests.codes.internal_server_error ) )
+  assert_that( response.json,
+               ErrorMatcher( ValueError,
+                             'Project directory must be absolute' ) )
+
+
+@SharedYcmd
+def ServerManagement_OpenProject_RelativePathNoPath_test( app ):
+  response = app.post_json(
+    '/run_completer_command',
+    BuildRequest(
+      filetype = 'java',
+      command_arguments = [
+        'OpenProject',
+      ],
+    ),
+    expect_errors = True,
+  )
+  assert_that( response.status_code,
+               equal_to( requests.codes.internal_server_error ) )
+  assert_that( response.json,
+               ErrorMatcher( ValueError,
+                             'Usage: OpenProject <project directory>' ) )
+
+
 def ServerManagement_ProjectDetection_NoParent_test():
   with TemporaryTestDir() as tmp_dir:
 
@@ -197,8 +343,10 @@ def ServerManagement_ProjectDetection_NoParent_test():
 
 
 @IsolatedYcmd
-@patch( 'ycmd.utils.WaitUntilProcessIsTerminated', side_effect = RuntimeError )
-def ServerManagement_CloseServer_Unclean_test( app, stop_server_cleanly ):
+@patch( 'shutil.rmtree', side_effect = OSError )
+@patch( 'ycmd.utils.WaitUntilProcessIsTerminated',
+        MockProcessTerminationTimingOut )
+def ServerManagement_CloseServer_Unclean_test( app, *args ):
   StartJavaCompleterServerInDirectory(
     app, PathToTestFile( 'simple_eclipse_project' ) )
 
@@ -206,8 +354,8 @@ def ServerManagement_CloseServer_Unclean_test( app, stop_server_cleanly ):
     '/run_completer_command',
     BuildRequest(
       filetype = 'java',
-      command_arguments = [ 'StopServer' ],
-    ),
+      command_arguments = [ 'StopServer' ]
+    )
   )
 
   request_data = BuildRequest( filetype = 'java' )
@@ -324,8 +472,7 @@ def ServerManagement_ServerDiesWhileShuttingDown_test( app ):
   # shutdown code as a successful shutdown. We need to do the shutdown and
   # terminate in parallel as the post_json is a blocking call.
   with patch.object( completer.GetConnection(), 'WriteData' ):
-    stop_server_task = threading.Thread( target=StopServerInAnotherThread )
-    stop_server_task.start()
+    stop_server_task = utils.StartThread( StopServerInAnotherThread )
     process.terminate()
     stop_server_task.join()
 
